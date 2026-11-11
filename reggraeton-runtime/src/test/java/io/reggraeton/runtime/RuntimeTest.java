@@ -1,0 +1,123 @@
+package io.reggraeton.runtime;
+
+import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.Page;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+
+import java.lang.reflect.Proxy;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class RuntimeTest {
+
+    @AfterEach
+    void cleanUp() {
+        System.clearProperty("baseUrl");
+        System.clearProperty("viewport");
+        PlaywrightSession.finish(false);
+    }
+
+    @Test
+    void runConfigPrefersSystemPropertiesAndNormalises() {
+        System.setProperty("baseUrl", "http://app:9000/");
+        System.setProperty("viewport", "800x600");
+
+        assertThat(RunConfig.baseUrl()).isEqualTo("http://app:9000");
+        assertThat(RunConfig.viewport()).containsExactly(800, 600);
+        assertThat(RunConfig.get("no.such.property", "NO_SUCH_ENV_VAR_REGGRAETON", "fallback")).isEqualTo("fallback");
+    }
+
+    @Test
+    void pendingConversionAlwaysThrows() {
+        assertThatThrownBy(() -> PendingConversion.fail("Steps.java:12 WebDriver.Options.logs"))
+                .isInstanceOf(PendingConversionException.class)
+                .hasMessageContaining("Not converted yet (reggraeton)")
+                .hasMessageContaining("Steps.java:12");
+    }
+
+    @Test
+    void literalRegexEscapesJavaScriptMetacharacters() {
+        assertThat(Waits.literal("a.b(c)?")).isEqualTo("a\\.b\\(c\\)\\?");
+        assertThat(java.util.regex.Pattern.compile(Waits.literal("/cart?id=[1]")).matcher("x/cart?id=[1]y").find()).isTrue();
+    }
+
+    @Test
+    void lazyLocatorResolvesOnEveryCall() {
+        AtomicInteger resolved = new AtomicInteger();
+        Locator fake = (Locator) Proxy.newProxyInstance(Locator.class.getClassLoader(), new Class<?>[] {Locator.class},
+                (proxy, method, args) -> method.getName().equals("innerText") ? "hello" : null);
+
+        Locator lazy = Locators.lazy(() -> {
+            resolved.incrementAndGet();
+            return fake;
+        });
+
+        assertThat(resolved).hasValue(0);
+        assertThat(lazy.innerText()).isEqualTo("hello");
+        assertThat(lazy.innerText()).isEqualTo("hello");
+        assertThat(resolved).hasValue(2);
+        assertThat(lazy).isEqualTo(lazy).isNotEqualTo(fake);
+    }
+
+    @Test
+    void sessionIsRequiredForCurrent() {
+        assertThat(PlaywrightSession.isActive()).isFalse();
+        assertThatThrownBy(PlaywrightSession::current).isInstanceOf(IllegalStateException.class);
+        assertThat(PlaywrightSession.safeFileName("Login: rejected [3]")).isEqualTo("Login_rejected_3_");
+    }
+
+    // ---- browser tests: opt-in with -Dreggraeton.browserTests=true (uses an installed browser) ----
+
+    @Test
+    @EnabledIfSystemProperty(named = "reggraeton.browserTests", matches = "true")
+    void waitsAndLazyListsWorkInARealBrowser() {
+        Page page = PlaywrightSession.start("runtime-test").page();
+        page.setContent("""
+                <h1 id="title">Shop</h1>
+                <ul id="results"></ul>
+                <input type="checkbox" id="agree">
+                <script>
+                  setTimeout(() => {
+                    document.getElementById('results').innerHTML = '<li class="p">A</li><li class="p">B</li>';
+                    document.getElementById('agree').checked = true;
+                    document.title = 'Results';
+                  }, 300);
+                </script>
+                """);
+        Waits wait = new Waits(page, Duration.ofSeconds(5));
+
+        assertThat(wait.visible("#results li.p").innerText()).isEqualTo("A");
+        List<Locator> items = Locators.lazyAll(() -> page.locator("#results li.p"));
+        assertThat(items).hasSize(2);
+        assertThat(items.get(1).innerText()).isEqualTo("B");
+        assertThat(wait.count("#results li.p", 2)).hasSize(2);
+        assertThat(wait.selected("#agree")).isTrue();
+        assertThat(wait.titleContains("Res")).isTrue();
+        assertThat(wait.text("#title", "Sho")).isTrue();
+        assertThat(PlaywrightSession.current().page()).isSameAs(page);
+    }
+
+    @Test
+    @EnabledIfSystemProperty(named = "reggraeton.browserTests", matches = "true")
+    void sendKeysTypesTextAndPressesKeys() {
+        Page page = PlaywrightSession.start("send-keys").page();
+        page.setContent("<input id='q' value='ab'><div id='log'></div>"
+                + "<script>document.getElementById('q').addEventListener('keydown', e => {"
+                + " if (e.key === 'Enter') document.getElementById('log').textContent = 'enter:' + e.target.value; });</script>");
+        Locator input = page.locator("#q");
+
+        Elements.sendKeys(input, "cd", Keys.ENTER);
+        assertThat(page.locator("#log").innerText()).isEqualTo("enter:abcd");
+
+        Elements.sendKeys(input, Keys.chord(Keys.CONTROL, "a"), "z");
+        assertThat(input.inputValue()).isEqualTo("z");
+        assertThat(Keys.of('\uE007') == Keys.ENTER).isTrue();
+        assertThat("x" + Keys.TAB).hasSize(2);
+    }
+}

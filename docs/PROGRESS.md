@@ -9,7 +9,7 @@ point: pick up the first phase that isn't done.
 | 1 | Project skeleton, scan model, Gherkin parsing, layout detection, sample fixture | done |
 | 2 | Step-definition / hook / parameter-type discovery, step matching, call graph | done |
 | 3 | `assess` command: inventory.json, HTML/MD report, call graph DOT/JSON, traceability.csv; CLI module | done |
-| 4 | Selenium → Playwright translation rule engine + runtime support sources | next |
+| 4 | Selenium → Playwright translation rule engine + runtime support sources | in progress (runtime done, translator next) |
 | 5 | `convert --mode bdd` and `--mode native` generators, Jenkinsfile/README templates, completeness gate | todo |
 | 6 | `doctor`, demo web app, end-to-end run of both generated projects, docs | todo |
 
@@ -64,9 +64,25 @@ point: pick up the first phase that isn't done.
   glue), `Traceability` (CSV, RFC 4180), `AssessmentWriter`.
 - `reggraeton-cli`: picocli `assess` command (`--out`, `--classpath`, `--base-package`,
   `--fail-on`), shaded `reggraeton.jar`, `bin/reggraeton` and `bin/reggraeton.cmd` launchers.
-- 37 tests green.
+- 33 tests green.
 
-## Next: phase 4
+## Phase 4, part 1 (done): `reggraeton-runtime`
+
+Compiled and tested module; its sources are copied into generated projects (package renamed).
+
+- `RunConfig`: `baseUrl`/`BASE_URL`, `headless`/`HEADLESS`, `browser.channel`/`BROWSER_CHANNEL`
+  (default `msedge`), `browser.executable`, `slowMo`, `timeout`, `navigationTimeout`, `viewport`,
+  `trace` (`on-failure`), `artifacts.dir`.
+- `PlaywrightSession`: browser launched once per thread from an installed channel/executable,
+  `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` always set; new context + page per test with baseURL,
+  timeouts, tracing; screenshot + trace on failure; clear error when the browser is missing.
+- `Waits` (WebDriverWait/ExpectedConditions equivalents as web-first waits), `Locators.lazy`/`lazyAll`
+  (`@FindBy` equivalents), `Keys` + `Elements.sendKeys` (Selenium key/chord semantics, caret at end),
+  `Screenshots`, `PendingConversion`/`PendingConversionException`.
+- Browser tests are opt-in: `mvn test -pl reggraeton-runtime -Dreggraeton.browserTests=true -Dbrowser.channel=chromium`
+  (verified here with the pre-installed Chromium; nothing downloaded).
+
+## Next: phase 4, part 2 (translator)
 
 - `reggraeton-runtime` sources (copied into generated projects, package `<base>.support`):
   `PlaywrightSession` (browser from `-Dbrowser.channel` default `msedge` / `-Dbrowser.executable`,

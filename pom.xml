@@ -12,6 +12,7 @@
   <description>Converts Cucumber-JVM / Selenium BDD suites into Playwright regression tests.</description>
 
   <modules>
+    <module>reggraeton-runtime</module>
     <module>reggraeton-core</module>
     <module>reggraeton-cli</module>
   </modules>
@@ -25,6 +26,10 @@
     <cucumber-expressions.version>20.2.0</cucumber-expressions.version>
     <tag-expressions.version>11.0.1</tag-expressions.version>
     <selenium.version>4.52.0</selenium.version>
+    <playwright.version>1.63.0</playwright.version>
+    <reggraeton.browserTests>false</reggraeton.browserTests>
+    <browser.channel></browser.channel>
+    <browser.executable></browser.executable>
     <javaparser.version>3.28.2</javaparser.version>
     <jackson.version>2.22.4</jackson.version>
     <picocli.version>4.7.7</picocli.version>
@@ -82,6 +87,11 @@
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
         <version>${jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.microsoft.playwright</groupId>
+        <artifactId>playwright</artifactId>
+        <version>${playwright.version}</version>
       </dependency>
       <dependency>
         <groupId>info.picocli</groupId>
