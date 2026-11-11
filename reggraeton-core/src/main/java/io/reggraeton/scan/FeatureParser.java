@@ -232,7 +232,8 @@ public final class FeatureParser {
                     ps.getText(),
                     source == null ? 0 : source.getLocation().getLine().intValue(),
                     index.backgroundStepIds.contains(stepId),
-                    argument(ps.getArgument().orElse(null))));
+                    argument(ps.getArgument().orElse(null)),
+                    null));
         }
 
         int idLine = row != null ? row.line() : scenario.line();

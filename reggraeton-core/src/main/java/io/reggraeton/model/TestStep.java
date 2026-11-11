@@ -7,6 +7,7 @@ package io.reggraeton.model;
  * @param type           effective type resolved by Cucumber: {@code Context}, {@code Action}, {@code Outcome} or {@code Unknown}
  * @param line           line of the step in the feature file
  * @param fromBackground true when the step comes from a Background
+ * @param match          how the step matched the glue code (null until matching ran)
  */
 public record TestStep(
         String keyword,
@@ -14,7 +15,12 @@ public record TestStep(
         String text,
         int line,
         boolean fromBackground,
-        StepArgument argument) {
+        StepArgument argument,
+        StepMatch match) {
+
+    public TestStep withMatch(StepMatch newMatch) {
+        return new TestStep(keyword, type, text, line, fromBackground, argument, newMatch);
+    }
 
     /** Gherkin keyword to use when the step is rendered on its own ({@code Given}/{@code When}/{@code Then}). */
     public String effectiveKeyword() {

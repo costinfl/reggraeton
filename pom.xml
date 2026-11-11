@@ -22,6 +22,8 @@
 
     <gherkin.version>42.0.1</gherkin.version>
     <cucumber-expressions.version>20.2.0</cucumber-expressions.version>
+    <tag-expressions.version>11.0.1</tag-expressions.version>
+    <selenium.version>4.52.0</selenium.version>
     <javaparser.version>3.28.2</javaparser.version>
     <jackson.version>2.22.4</jackson.version>
     <picocli.version>4.7.7</picocli.version>
@@ -40,6 +42,35 @@
         <groupId>io.cucumber</groupId>
         <artifactId>cucumber-expressions</artifactId>
         <version>${cucumber-expressions.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.cucumber</groupId>
+        <artifactId>tag-expressions</artifactId>
+        <version>${tag-expressions.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.seleniumhq.selenium</groupId>
+        <artifactId>selenium-api</artifactId>
+        <version>${selenium.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.seleniumhq.selenium</groupId>
+        <artifactId>selenium-support</artifactId>
+        <version>${selenium.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-remote-driver</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-json</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.github.javaparser</groupId>

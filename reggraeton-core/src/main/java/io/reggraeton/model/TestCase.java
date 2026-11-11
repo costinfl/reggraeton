@@ -27,4 +27,9 @@ public record TestCase(
         String examplesName,
         List<String> tags,
         List<TestStep> steps) {
+
+    public TestCase withSteps(List<TestStep> newSteps) {
+        return new TestCase(id, feature, featureName, rule, scenarioName, name, scenarioLine, exampleLine,
+                exampleIndex, examplesName, tags, newSteps);
+    }
 }

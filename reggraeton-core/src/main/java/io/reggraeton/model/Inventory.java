@@ -11,7 +11,14 @@ public record Inventory(
         String generatedAt,
         ProjectLayout layout,
         List<FeatureFile> features,
-        List<TestCase> testCases) {
+        List<TestCase> testCases,
+        List<StepDefinition> stepDefinitions,
+        List<Hook> hooks,
+        List<ParameterTypeDefinition> parameterTypes,
+        List<DataTableTypeDefinition> dataTableTypes,
+        CallGraph callGraph,
+        List<TestCaseAssessment> assessments,
+        List<Finding> findings) {
 
     public static final String SCHEMA_VERSION = "1";
 }

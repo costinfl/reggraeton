@@ -23,6 +23,23 @@
       <artifactId>cucumber-expressions</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>tag-expressions</artifactId>
+    </dependency>
+    <!--
+      Selenium API types are on the classpath only so that the symbol solver can resolve the
+      types used by the scanned code (WebDriver, WebElement, By, Select ...). No browser and no
+      driver is ever started by reggraeton.
+    -->
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-support</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.github.javaparser</groupId>
       <artifactId>javaparser-symbol-solver-core</artifactId>
     </dependency>
