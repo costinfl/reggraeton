@@ -9,7 +9,7 @@ import picocli.CommandLine.Command;
         mixinStandardHelpOptions = true,
         versionProvider = Main.Version.class,
         description = "Converts Cucumber-JVM / Selenium BDD suites into Playwright for Java regression tests.",
-        subcommands = {AssessCommand.class, ConvertCommand.class, CommandLine.HelpCommand.class})
+        subcommands = {AssessCommand.class, ConvertCommand.class, DoctorCommand.class, RulesCommand.class, CommandLine.HelpCommand.class})
 public final class Main implements Runnable {
 
     @CommandLine.Spec

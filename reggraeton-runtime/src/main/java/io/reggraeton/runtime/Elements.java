@@ -2,9 +2,12 @@ package io.reggraeton.runtime;
 
 import com.microsoft.playwright.Keyboard;
 import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.PlaywrightException;
+import com.microsoft.playwright.options.WaitForSelectorState;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 
 /** Element helpers whose Selenium semantics have no one-call Playwright equivalent. */
 public final class Elements {
@@ -50,6 +53,38 @@ public final class Elements {
         flush(keyboard, text);
         while (!held.isEmpty()) {
             keyboard.up(held.pop());
+        }
+    }
+
+    /**
+     * Selenium {@code findElements}: waits for the current page to finish loading (Selenium does after a
+     * click that navigates), then for at most {@link RunConfig#implicitWaitMs()} for a first match, and
+     * returns all matches (possibly none).
+     */
+    public static List<Locator> findAll(Locator locator) {
+        settle(locator);
+        return locator.all();
+    }
+
+    /** Number of matches, with the same waiting as {@link #findAll}. */
+    static int count(Locator locator) {
+        settle(locator);
+        return locator.count();
+    }
+
+    private static void settle(Locator locator) {
+        try {
+            locator.page().waitForLoadState();
+        } catch (PlaywrightException e) {
+            // page closed or navigating away: let the lookup itself report problems
+        }
+        double implicitWait = RunConfig.implicitWaitMs();
+        if (implicitWait > 0) {
+            try {
+                locator.first().waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.ATTACHED).setTimeout(implicitWait));
+            } catch (PlaywrightException e) {
+                // no match within the implicit wait: an empty list, like Selenium
+            }
         }
     }
 

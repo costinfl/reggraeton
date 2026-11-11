@@ -58,7 +58,7 @@ public class ProductsPage extends BasePage {
     }
 
     public String cartBadge() {
-        return driver.findElement(By.cssSelector("a.cart-link .badge")).getText();
+        return driver.findElement(By.cssSelector("nav.cart .badge")).getText();
     }
 
     public CartPage openCart() {

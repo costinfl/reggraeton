@@ -39,7 +39,7 @@ public final class SeleniumApiCatalog {
         auto("WebDriver.getCurrentUrl", "page.url()");
         auto("WebDriver.getPageSource", "page.content()");
         auto("WebDriver.findElement", "page.locator(selector)");
-        auto("WebDriver.findElements", "page.locator(selector).all()");
+        auto("WebDriver.findElements", "Elements.findAll(page.locator(selector))");
         auto("WebDriver.quit", "handled by the Playwright session");
         auto("WebDriver.close", "page.close()");
         auto("WebDriver.navigate", "see WebDriver.Navigation");

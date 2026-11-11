@@ -13,6 +13,7 @@ final class ProjectFiles {
     static final String JUNIT_VERSION = "6.1.3";
     static final String CUCUMBER_VERSION = "8.0.4";
     static final String TAG_EXPRESSIONS_VERSION = "11.0.1";
+    static final String JACKSON_VERSION = "2.22.4";
 
     private ProjectFiles() {
     }
@@ -30,6 +31,9 @@ final class ProjectFiles {
             }
             deps.add(dep("io.cucumber", "cucumber-junit-platform-engine", "${cucumber.version}"));
             deps.add(dep("io.cucumber", "cucumber-picocontainer", "${cucumber.version}"));
+            // Cucumber 8 writes its reports (html plugin) with Jackson
+            deps.add(dep("com.fasterxml.jackson.core", "jackson-databind", JACKSON_VERSION));
+            deps.add(dep("com.fasterxml.jackson.datatype", "jackson-datatype-jdk8", JACKSON_VERSION));
         } else {
             deps.add(dep("io.cucumber", "tag-expressions", TAG_EXPRESSIONS_VERSION));
         }

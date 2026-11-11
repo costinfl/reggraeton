@@ -11,7 +11,7 @@ point: pick up the first phase that isn't done.
 | 3 | `assess` command: inventory.json, HTML/MD report, call graph DOT/JSON, traceability.csv; CLI module | done |
 | 4 | Selenium → Playwright translation rule engine + runtime support sources | done |
 | 5 | `convert --mode bdd` and `--mode native` generators, Jenkinsfile/README templates, completeness gate | done |
-| 6 | `doctor`, demo web app, end-to-end run of both generated projects, docs | next |
+| 6 | `doctor`, demo web app, end-to-end run of both generated projects, docs | done |
 
 ## Phase 1 (done)
 
@@ -129,11 +129,31 @@ Compiled and tested module; its sources are copied into generated projects (pack
 - Verified: both generated projects compile with javac in tests and with real `mvn test-compile`.
   57 tests green.
 
-## Next: phase 6
+## Phase 6 (done): end to end
 
-- `samples/demo-app`: small static web shop served by a JDK-only server, matching the fixture.
-- Run both generated projects end to end against it with the pre-installed Chromium
-  (`-Dbrowser.channel=chromium`), headless and windowed (xvfb), check: 8 pass, the partial test
-  fails with PendingConversionException, the blocked test fails with the undefined step.
-- `reggraeton doctor`: checks Java, finds Edge/Chrome/Chromium installs, launches nothing by default.
-- Final README / docs (`docs/rules.md` from the catalogue).
+- `samples/demo-app`: static demo shop + JDK-only `DemoServer.java` matching the sample suite.
+- End-to-end runs here, with the pre-installed Chromium (`-Dbrowser.channel=chromium`), nothing downloaded:
+  - native and bdd: 10 tests each, 8 pass, 2 fail by design (TODO stub with original file:line,
+    undefined step), screenshot + trace saved for each failure;
+  - windowed (`-Dheadless=false`, under xvfb) with `-Dcucumber.filter.tags=@smoke`: 2 run, 8 skipped, both modes;
+  - single test: `-Dcucumber.features=...login.feature:27` (bdd), `-Dtest=LoginTest#rejectedLogin` (native);
+  - default channel `msedge` (not installed in the sandbox): immediate, explanatory failure, no download.
+- Fixes found by the runs: Cucumber 8 needs Jackson for its HTML report (added to bdd poms);
+  element lists wait for the page load like Selenium (`Elements.findAll`, `Locators.lazyAll`,
+  optional `-DimplicitWait`).
+- `reggraeton doctor` (Java, Maven, installed Edge/Chrome/Chromium per OS; launches nothing),
+  `reggraeton rules` (→ `docs/rules.md`), `scripts/e2e.sh`, README.
+- 56 tests green (+ opt-in browser tests).
+
+## Not verified here
+
+- Microsoft Edge itself (not installed in this sandbox): the `msedge` channel is Playwright's
+  standard channel; first real run is on a machine with Edge (`scripts/e2e.sh` defaults to it).
+- Jenkins: the `Jenkinsfile` is generated and reviewed but was not executed on a Jenkins server.
+- Windows: `bin/reggraeton.cmd` and the `bat` branch of the Jenkinsfile were not run.
+
+## Possible next steps
+
+- Run `assess` on a real legacy repository and extend the rule catalogue with what it reports.
+- Translate frames (`switchTo().frame` → `frameLocator`) and alerts (`onceDialog`) automatically.
+- Native mode: `@BeforeAll`/`@AfterAll` hooks via a JUnit extension; custom `@DataTableType`.

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Legacy Shop - Products</title>
+  <link rel="stylesheet" href="shop.css">
+</head>
+<body>
+<header>
+  <span id="welcome"></span>
+  <nav class="cart"><a class="cart-link" href="cart.html">Cart</a> <span class="badge">0</span></nav>
+</header>
+<main>
+  <div class="panel">
+    <input name="q" placeholder="Search products" autocomplete="off">
+    <button id="search-btn" type="button">Search</button>
+    <select id="sort">
+      <option>Relevance</option>
+      <option>Price: low to high</option>
+      <option>Price: high to low</option>
+    </select>
+    <ul id="results"></ul>
+  </div>
+</main>
+<script src="shop.js"></script>
+<script>
+  const user = localStorage.getItem('user');
+  if (!user) {
+    location.href = 'login.html';
+  }
+  document.getElementById('welcome').textContent = 'Welcome, ' + user;
+  let found = [];
+
+  function render() {
+    const sort = document.getElementById('sort').value;
+    const items = found.slice();
+    if (sort === 'Price: low to high') items.sort((a, b) => a.price - b.price);
+    if (sort === 'Price: high to low') items.sort((a, b) => b.price - a.price);
+    const list = document.getElementById('results');
+    list.innerHTML = '';
+    for (const product of items) {
+      const li = document.createElement('li');
+      li.className = 'product';
+      li.dataset.name = product.name;
+      li.innerHTML = '<span class="name"></span><span class="price"></span><button class="add-to-cart" type="button">Add to cart</button>';
+      li.querySelector('.name').textContent = product.name;
+      li.querySelector('.price').textContent = product.price.toFixed(2) + ' EUR';
+      li.querySelector('button').addEventListener('click', () => { addToCart(product.name); updateBadge(); });
+      list.appendChild(li);
+    }
+  }
+
+  function updateBadge() {
+    document.querySelector('nav.cart .badge').textContent = String(cartCount());
+  }
+
+  document.getElementById('search-btn').addEventListener('click', () => {
+    const term = document.querySelector('input[name=q]').value.trim().toLowerCase();
+    found = CATALOG.filter(p => p.name.toLowerCase().includes(term));
+    render();
+  });
+  document.getElementById('sort').addEventListener('change', render);
+  updateBadge();
+</script>
+</body>
+</html>

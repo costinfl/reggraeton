@@ -134,7 +134,7 @@ public final class PlaywrightSession {
         if (!artifacts.isEmpty()) {
             System.err.println("[reggraeton] artifacts for '" + session.testName + "': " + artifacts
                     + (artifacts.stream().anyMatch(p -> p.toString().endsWith(".zip"))
-                    ? " (open a trace with: mvn exec:java -e -D exec.mainClass=com.microsoft.playwright.CLI -D exec.args=\"show-trace <zip>\")" : ""));
+                    ? " (view a trace by dropping the zip on https://trace.playwright.dev; it stays on your machine)" : ""));
         }
         return artifacts;
     }

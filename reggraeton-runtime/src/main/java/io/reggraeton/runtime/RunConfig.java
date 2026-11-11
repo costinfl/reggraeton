@@ -18,6 +18,7 @@ import java.util.Optional;
  *   <tr><td>slow motion (ms)</td><td>slowMo</td><td>SLOW_MO</td><td>0</td></tr>
  *   <tr><td>action/assert timeout (ms)</td><td>timeout</td><td>PW_TIMEOUT</td><td>15000</td></tr>
  *   <tr><td>navigation timeout (ms)</td><td>navigationTimeout</td><td>PW_NAVIGATION_TIMEOUT</td><td>30000</td></tr>
+ *   <tr><td>implicit wait for element lists (ms)</td><td>implicitWait</td><td>IMPLICIT_WAIT</td><td>0</td></tr>
  *   <tr><td>viewport</td><td>viewport</td><td>VIEWPORT</td><td>1366x768</td></tr>
  *   <tr><td>trace</td><td>trace</td><td>PW_TRACE</td><td>on-failure (on, off)</td></tr>
  *   <tr><td>artifacts folder</td><td>artifacts.dir</td><td>ARTIFACTS_DIR</td><td>target/playwright-artifacts</td></tr>
@@ -57,6 +58,14 @@ public final class RunConfig {
 
     public static double navigationTimeoutMs() {
         return Double.parseDouble(get("navigationTimeout", "PW_NAVIGATION_TIMEOUT", "30000"));
+    }
+
+    /**
+     * Like Selenium's implicit wait, but only for element lists ({@code findElements}, {@code @FindBy List}):
+     * how long to wait for at least one match before returning an empty list. Single elements always auto-wait.
+     */
+    public static double implicitWaitMs() {
+        return Double.parseDouble(get("implicitWait", "IMPLICIT_WAIT", "0"));
     }
 
     /** Viewport as {@code [width, height]}. */

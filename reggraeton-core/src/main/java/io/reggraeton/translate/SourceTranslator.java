@@ -880,7 +880,7 @@ final class SourceTranslator {
                 return Selectors.isUnique(args.get(0)) ? locator : call(locator, "first");
             }
             case "WebDriver.findElements", "SearchContext.findElements", "WebElement.findElements":
-                return call(call(s, "locator", args.get(0)), "all");
+                return new MethodCallExpr(new NameExpr("Elements"), "findAll", new NodeList<>(call(s, "locator", args.get(0))));
             case "WebDriver.Navigation.to":
                 return call(scopeOf(s), "navigate", args.get(0));
             case "WebDriver.Navigation.back":

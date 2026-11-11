@@ -51,7 +51,8 @@ public final class Locators {
 
     /**
      * A live list of all elements matching {@code supplier.get()}, like a Selenium
-     * {@code @FindBy List<WebElement>}: size and items are looked up on each access.
+     * {@code @FindBy List<WebElement>}: size and items are looked up on each access, after the
+     * page has finished loading (see {@link Elements#findAll}).
      */
     public static List<Locator> lazyAll(Supplier<Locator> supplier) {
         return new AbstractList<>() {
@@ -65,7 +66,7 @@ public final class Locators {
 
             @Override
             public int size() {
-                return supplier.get().count();
+                return Elements.count(supplier.get());
             }
         };
     }

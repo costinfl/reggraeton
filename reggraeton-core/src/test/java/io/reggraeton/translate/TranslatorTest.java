@@ -82,7 +82,7 @@ class TranslatorTest {
                 .contains("name.fill(user);")
                 .contains("name.press(\"Tab\");")
                 .contains("Elements.sendKeys(driver.locator(\"[name=\\\"q\\\"]\").first(), \"abc\", Keys.ENTER);")
-                .contains("List<Locator> rows = driver.locator(\"tr.row\").all();")
+                .contains("List<Locator> rows = Elements.findAll(driver.locator(\"tr.row\"));")
                 .contains("driver.locator(\"xpath=//input[@id='\" + user + \"']\").first().inputValue()")
                 .contains("driver.locator(\"#sort\").selectOption(\"asc\");")
                 .contains("driver.evaluate(\"() => { window.scrollTo(0, 0); }\");")
