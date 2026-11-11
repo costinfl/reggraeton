@@ -18,10 +18,14 @@ public final class RuntimeSources {
     private RuntimeSources() {
     }
 
-    /** Simple class name to source, with {@code package} set to {@code targetPackage}. */
+    /** Common support classes: simple class name to source, with {@code package} set to {@code targetPackage}. */
     public static Map<String, String> load(String targetPackage) {
+        return load(targetPackage, SupportNames.RUNTIME_CLASSES);
+    }
+
+    public static Map<String, String> load(String targetPackage, java.util.Collection<String> classNames) {
         Map<String, String> sources = new TreeMap<>();
-        for (String name : SupportNames.RUNTIME_CLASSES) {
+        for (String name : classNames) {
             String resource = "/reggraeton/runtime-sources/" + name + ".java";
             try (InputStream in = RuntimeSources.class.getResourceAsStream(resource)) {
                 if (in == null) {

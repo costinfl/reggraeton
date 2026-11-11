@@ -10,8 +10,8 @@ point: pick up the first phase that isn't done.
 | 2 | Step-definition / hook / parameter-type discovery, step matching, call graph | done |
 | 3 | `assess` command: inventory.json, HTML/MD report, call graph DOT/JSON, traceability.csv; CLI module | done |
 | 4 | Selenium → Playwright translation rule engine + runtime support sources | done |
-| 5 | `convert --mode bdd` and `--mode native` generators, Jenkinsfile/README templates, completeness gate | next |
-| 6 | `doctor`, demo web app, end-to-end run of both generated projects, docs | todo |
+| 5 | `convert --mode bdd` and `--mode native` generators, Jenkinsfile/README templates, completeness gate | done |
+| 6 | `doctor`, demo web app, end-to-end run of both generated projects, docs | next |
 
 ## Phase 1 (done)
 
@@ -106,15 +106,34 @@ Compiled and tested module; its sources are copied into generated projects (pack
 - Tests: rule snippets, stubs, driver setup, catalogue ⊆ rules, and the whole translated fixture +
   runtime compiled with javac against Playwright 1.63 + Cucumber 8.0.4. 46 tests green.
 
-## Next: phase 5
+## Phase 5 (done): `convert`
 
-- Generators writing a standalone Maven project (`convert <repo> --out <dir> --mode bdd|native`):
-  - common: translated sources, runtime sources in `<base>.support`, `pom.xml` (Playwright, JUnit,
-    Surefire with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, JUnit XML), `Jenkinsfile`, `README.md`,
-    `traceability.csv`, `conversion-report.md`, completeness gate (every test case has a test).
-  - bdd: copy features to `TestNaming.bddFeaturePath`, keep glue (cucumber-java/java8/picocontainer
-    8.0.4), generated `PlaywrightHooks` (session start/finish around each scenario) and a JUnit
-    Platform suite runner.
-  - native: per feature a JUnit class per `TestNaming`; strip Cucumber annotations, turn java8 lambda
-    steps into methods, `DataTable`/`Scenario` support types, hooks invoked by tag expression,
-    arguments converted at generation time; blocked tests fail with the reason.
+- `generate.ProjectGenerator` writes a standalone Maven project: translated glue, runtime support
+  sources (per mode), `pom.xml` (Playwright 1.63.0, JUnit 6.1.3, Cucumber 8.0.4 in bdd mode,
+  assertion libraries the legacy code used; Surefire always sets `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`),
+  `Jenkinsfile` (BASE_URL / TAGS / BROWSER_CHANNEL / HEADLESS parameters, sh/bat, JUnit results,
+  artifacts), `README.md`, `.gitignore`, `traceability.csv`, `conversion-report.md`.
+- Completeness gate: every test case id must be covered by a generated test (exit code 3 otherwise).
+- bdd: features copied unchanged to `src/test/resources/features/...` (per `TestNaming`), suite
+  runner `RunRegressionTest` with the glue packages + support package, `PlaywrightHooks` (session
+  around each scenario, screenshot attached on failure).
+- native: `NativeGlueRewriter` drops Cucumber annotations, turns cucumber-java8 lambdas into
+  methods (captured constructor params/locals become fields), swaps `Scenario`/`DataTable` for
+  runtime equivalents; `NativeTestWriter` writes a JUnit class per feature (outlines as
+  `@ParameterizedTest` + `Named` rows), hooks chosen by tag expression at generation time and
+  ordered like Cucumber, `ArgumentRenderer` converts step arguments (built-in types, custom
+  parameter types through their converter method, data tables / doc strings, enums); undefined,
+  ambiguous or unconvertible steps fail with the reason. Runtime: `RegressionTest`, `Scenario`,
+  `DataTable`, `ScenarioScope` (picocontainer-like), `TagFilter` (`-Dcucumber.filter.tags` in both modes).
+- CLI: `reggraeton convert <repo> --out <dir> --mode bdd|native [--base-package] [--force] ...`.
+- Verified: both generated projects compile with javac in tests and with real `mvn test-compile`.
+  57 tests green.
+
+## Next: phase 6
+
+- `samples/demo-app`: small static web shop served by a JDK-only server, matching the fixture.
+- Run both generated projects end to end against it with the pre-installed Chromium
+  (`-Dbrowser.channel=chromium`), headless and windowed (xvfb), check: 8 pass, the partial test
+  fails with PendingConversionException, the blocked test fails with the undefined step.
+- `reggraeton doctor`: checks Java, finds Edge/Chrome/Chromium installs, launches nothing by default.
+- Final README / docs (`docs/rules.md` from the catalogue).

@@ -24,6 +24,27 @@
       <artifactId>playwright</artifactId>
     </dependency>
 
+    <!--
+      Optional: each generated project gets only the support classes its mode needs.
+      native mode: JUnit API + tag expressions (RegressionTest, Scenario, DataTable, ScenarioScope, TagFilter);
+      bdd mode: Cucumber (PlaywrightHooks).
+    -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>tag-expressions</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>cucumber-java</artifactId>
+      <optional>true</optional>
+    </dependency>
+
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

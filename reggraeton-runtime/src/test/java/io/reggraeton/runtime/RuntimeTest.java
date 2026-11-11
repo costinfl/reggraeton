@@ -48,6 +48,70 @@ class RuntimeTest {
     }
 
     @Test
+    void dataTableOffersCucumberStyleViews() {
+        DataTable table = DataTable.of(new String[][] {{"product", "quantity"}, {"Laptop", "1"}, {"Cable", "3"}});
+
+        assertThat(table.asMaps()).containsExactly(
+                java.util.Map.of("product", "Laptop", "quantity", "1"),
+                java.util.Map.of("product", "Cable", "quantity", "3"));
+        assertThat(table.asLists()).hasSize(3);
+        assertThat(table.asList()).containsExactly("product", "quantity", "Laptop", "1", "Cable", "3");
+        assertThat(table.column(0)).containsExactly("product", "Laptop", "Cable");
+        assertThat(table.transpose().row(0)).containsExactly("product", "Laptop", "Cable");
+        assertThat(table.height()).isEqualTo(3);
+        assertThat(table.width()).isEqualTo(2);
+    }
+
+    static class Context {
+    }
+
+    static class Steps {
+        final Context context;
+        final Scenario scenario;
+
+        Steps(Context context, Scenario scenario) {
+            this.context = context;
+            this.scenario = scenario;
+        }
+    }
+
+    static class MoreSteps {
+        final Context context;
+
+        MoreSteps(Context context) {
+            this.context = context;
+        }
+    }
+
+    @Test
+    void scenarioScopeSharesInstancesLikePicocontainer() {
+        ScenarioScope scope = new ScenarioScope();
+        Scenario scenario = new Scenario("a.feature:3", "s", List.of("@x"));
+        scope.register(Scenario.class, scenario);
+
+        Steps steps = scope.get(Steps.class);
+
+        assertThat(steps.scenario).isSameAs(scenario);
+        assertThat(scope.get(MoreSteps.class).context).isSameAs(steps.context);
+        assertThat(scope.get(Steps.class)).isSameAs(steps);
+        assertThat(scenario.getUri()).isEqualTo("a.feature");
+        assertThat(scenario.getLine()).isEqualTo(3);
+    }
+
+    @Test
+    void tagFilterUsesCucumberExpressions() {
+        try {
+            System.setProperty("cucumber.filter.tags", "@smoke and not @wip");
+            assertThat(TagFilter.accepts(List.of("@smoke"))).isTrue();
+            assertThat(TagFilter.accepts(List.of("@smoke", "@wip"))).isFalse();
+            assertThat(TagFilter.accepts(List.of())).isFalse();
+        } finally {
+            System.clearProperty("cucumber.filter.tags");
+        }
+        assertThat(TagFilter.accepts(List.of())).isTrue();
+    }
+
+    @Test
     void lazyLocatorResolvesOnEveryCall() {
         AtomicInteger resolved = new AtomicInteger();
         Locator fake = (Locator) Proxy.newProxyInstance(Locator.class.getClassLoader(), new Class<?>[] {Locator.class},
