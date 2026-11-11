@@ -49,6 +49,19 @@ public final class Assessor {
         }
     }
 
+    /** Call-graph nodes reachable from the step definitions and hooks the test cases actually use. */
+    public static Set<String> usedNodes(io.reggraeton.model.Inventory inventory) {
+        Assessor assessor = new Assessor(inventory.callGraph());
+        Set<String> used = new LinkedHashSet<>();
+        for (TestCaseAssessment a : inventory.assessments()) {
+            a.stepDefinitionIds().forEach(id -> used.addAll(assessor.reachable(id)));
+            a.hookIds().forEach(id -> used.addAll(assessor.reachable(id)));
+        }
+        inventory.hooks().stream().filter(h -> h.phase().endsWith("All"))
+                .forEach(h -> used.addAll(assessor.reachable(h.id())));
+        return used;
+    }
+
     /** Nodes reachable from {@code entry} (inclusive). */
     public Set<String> reachable(String entry) {
         return reach(entry).nodes();

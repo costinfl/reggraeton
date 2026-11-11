@@ -45,11 +45,12 @@ public final class SeleniumApiCatalog {
         auto("WebDriver.navigate", "see WebDriver.Navigation");
         auto("WebDriver.manage", "see WebDriver.Options");
         auto("WebDriver.switchTo", "see WebDriver.TargetLocator");
-        auto("WebDriver.getWindowHandle", "page reference");
+        manual("WebDriver.getWindowHandle", "windows: keep a reference to the Page object instead of a handle");
         manual("WebDriver.getWindowHandles", "multiple windows: use context.pages() / page.waitForPopup()");
         auto("SearchContext.findElement", "locator.locator(selector)");
         auto("SearchContext.findElements", "locator.locator(selector).all()");
         auto("WebElement.findElement", "locator.locator(selector)");
+        auto("WebElement.getScreenshotAs", "locator.screenshot()");
         auto("WebElement.findElements", "locator.locator(selector).all()");
         auto("WebElement.click", "locator.click()");
         auto("WebElement.submit", "locator.press(\"Enter\")");
@@ -64,9 +65,9 @@ public final class SeleniumApiCatalog {
         auto("WebElement.isEnabled", "locator.isEnabled()");
         auto("WebElement.isSelected", "locator.isChecked()");
         auto("WebElement.getTagName", "locator.evaluate(\"e => e.tagName.toLowerCase()\")");
-        auto("WebElement.getSize", "locator.boundingBox()");
-        auto("WebElement.getLocation", "locator.boundingBox()");
-        auto("WebElement.getRect", "locator.boundingBox()");
+        manual("WebElement.getSize", "use locator.boundingBox() (width/height fields)");
+        manual("WebElement.getLocation", "use locator.boundingBox() (x/y fields)");
+        manual("WebElement.getRect", "use locator.boundingBox()");
 
         // Locators
         for (String by : List.of("id", "cssSelector", "xpath", "name", "className", "linkText", "partialLinkText", "tagName")) {
@@ -108,7 +109,7 @@ public final class SeleniumApiCatalog {
         auto("WebDriver.Timeouts.setScriptTimeout", "dropped");
 
         // Frames, windows, alerts
-        auto("WebDriver.TargetLocator.activeElement", "page.locator(\":focus\")");
+        auto("WebDriver.TargetLocator.activeElement", "page.locator(\"*:focus\")");
         manual("WebDriver.TargetLocator.frame", "frames: use page.frameLocator(selector) for the following calls");
         manual("WebDriver.TargetLocator.defaultContent", "frames: go back to using page");
         manual("WebDriver.TargetLocator.parentFrame", "frames: use the parent FrameLocator");

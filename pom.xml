@@ -27,6 +27,7 @@
     <tag-expressions.version>11.0.1</tag-expressions.version>
     <selenium.version>4.52.0</selenium.version>
     <playwright.version>1.63.0</playwright.version>
+    <cucumber.version>8.0.4</cucumber.version>
     <reggraeton.browserTests>false</reggraeton.browserTests>
     <browser.channel></browser.channel>
     <browser.executable></browser.executable>
@@ -94,6 +95,16 @@
         <version>${playwright.version}</version>
       </dependency>
       <dependency>
+        <groupId>io.cucumber</groupId>
+        <artifactId>cucumber-java</artifactId>
+        <version>${cucumber.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.cucumber</groupId>
+        <artifactId>cucumber-java8</artifactId>
+        <version>${cucumber.version}</version>
+      </dependency>
+      <dependency>
         <groupId>info.picocli</groupId>
         <artifactId>picocli</artifactId>
         <version>${picocli.version}</version>
@@ -135,6 +146,11 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
           <version>3.4.2</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>3.3.1</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>

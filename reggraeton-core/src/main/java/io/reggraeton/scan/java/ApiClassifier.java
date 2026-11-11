@@ -24,7 +24,7 @@ public final class ApiClassifier {
 
         if (declaringType.equals("java.lang.Thread") && member.equals("sleep")) {
             return new ApiUsage("timing", "Thread.sleep", code, line, ApiUsage.AUTO,
-                    "hard wait kept as page.waitForTimeout; prefer a web-first assertion");
+                    "hard wait kept as is; consider a web-first assertion instead");
         }
         if (isJdk(declaringType)) {
             return null;

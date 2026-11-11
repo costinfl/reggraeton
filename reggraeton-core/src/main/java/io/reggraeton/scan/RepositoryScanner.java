@@ -48,7 +48,15 @@ public final class RepositoryScanner {
         this.extraClasspath = List.copyOf(extraClasspath);
     }
 
+    /** Inventory plus the parsed Java sources (needed by the translator). */
+    public record Scan(Inventory inventory, JavaSourceIndex index) {
+    }
+
     public Inventory scan(Path repository) {
+        return scanWithSources(repository).inventory();
+    }
+
+    public Scan scanWithSources(Path repository) {
         Path root = repository.toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) {
             throw new IllegalArgumentException("Not a directory: " + root);
@@ -107,7 +115,7 @@ public final class RepositoryScanner {
         hooks.stream().filter(h -> h.phase().endsWith("All")).forEach(h -> usedNodes.addAll(assessor.reachable(h.id())));
         findings.addAll(Assessor.findings(layout, matched, stepDefinitions, hooks, graph, usedNodes));
 
-        return new Inventory(
+        return new Scan(new Inventory(
                 Inventory.SCHEMA_VERSION,
                 OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString(),
                 layout,
@@ -119,7 +127,7 @@ public final class RepositoryScanner {
                 glue.dataTableTypes(),
                 graph,
                 assessments,
-                findings);
+                findings), index);
     }
 
     /**

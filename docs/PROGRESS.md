@@ -9,8 +9,8 @@ point: pick up the first phase that isn't done.
 | 1 | Project skeleton, scan model, Gherkin parsing, layout detection, sample fixture | done |
 | 2 | Step-definition / hook / parameter-type discovery, step matching, call graph | done |
 | 3 | `assess` command: inventory.json, HTML/MD report, call graph DOT/JSON, traceability.csv; CLI module | done |
-| 4 | Selenium → Playwright translation rule engine + runtime support sources | in progress (runtime done, translator next) |
-| 5 | `convert --mode bdd` and `--mode native` generators, Jenkinsfile/README templates, completeness gate | todo |
+| 4 | Selenium → Playwright translation rule engine + runtime support sources | done |
+| 5 | `convert --mode bdd` and `--mode native` generators, Jenkinsfile/README templates, completeness gate | next |
 | 6 | `doctor`, demo web app, end-to-end run of both generated projects, docs | todo |
 
 ## Phase 1 (done)
@@ -82,13 +82,39 @@ Compiled and tested module; its sources are copied into generated projects (pack
 - Browser tests are opt-in: `mvn test -pl reggraeton-runtime -Dreggraeton.browserTests=true -Dbrowser.channel=chromium`
   (verified here with the pre-installed Chromium; nothing downloaded).
 
-## Next: phase 4, part 2 (translator)
+## Phase 4, part 2 (done): translator (`io.reggraeton.translate`)
 
-- `reggraeton-runtime` sources (copied into generated projects, package `<base>.support`):
-  `PlaywrightSession` (browser from `-Dbrowser.channel` default `msedge` / `-Dbrowser.executable`,
-  `-Dheadless`, `-DbaseUrl`, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, trace + screenshot on failure),
-  `RunConfig`, `PendingConversionException`.
-- `translate` package: AST rewrite of reachable classes (JavaParser, LexicalPreservingPrinter where
-  possible) driven by the same API names as `SeleniumApiCatalog`; anything without a rule becomes
-  `// TODO(reggraeton)` + `throw new PendingConversionException(...)`.
-- Consistency test: every `auto` catalogue entry has a rule.
+- `Translator` selects the legacy files to convert (glue used by scenarios, everything reachable,
+  referenced project types, parameter types; runners excluded) and runs `SourceTranslator` on each.
+- `SourceTranslator`: pass 1 resolves/plans every call on the untouched AST; pass 2 applies:
+  - `By.*` → Playwright selector strings (`#id`, css, `xpath=`, `[name=..]`, `a:text-is(..)`),
+    `findElement` → `locator(..)` (+ `.first()` unless the selector is an id, to keep Selenium's
+    first-match semantics), `findElements` → `.all()`;
+  - element calls (`click`, `getText`→`innerText`, `getAttribute("value")`→`inputValue`, `isSelected`→`isChecked`, ...);
+    `clear(); sendKeys(text)` → `fill(text)`, other `sendKeys` → `press` / `Elements.sendKeys`;
+  - `WebDriverWait`/`FluentWait` → `Waits`, `until(ExpectedConditions.x(..))` → `wait.x(..)`;
+  - `Select`, `Actions` chains (→ sequential locator calls), `executeScript`, screenshots,
+    navigation, cookies, window/timeouts (removed with a comment), `PageFactory` (removed);
+  - `@FindBy`/`@FindBys`/`@FindAll` fields → `Locators.lazy(() -> this.driver.locator(..))`;
+  - driver creation (`new ChromeDriver`, WebDriverManager, options) → `PlaywrightSession.current().page()` / removed;
+  - `System.getProperty("app.url"...)`-style base URL lookups → `RunConfig.baseUrl()`;
+  - types (`WebDriver`→`Page`, `WebElement`/`Select`→`Locator`, `By`→`String`, waits, exceptions,
+    other Selenium types → `Object`), multi-catch de-duplication, imports.
+  - anything without a rule → statement-level `// TODO(reggraeton) ...` + `PendingConversion.fail(..)`
+    (keeps the file compilable, fails at run time with file:line of the original code).
+- `RuntimeSources`: runtime support sources packaged in the core jar, re-packaged on demand.
+- Tests: rule snippets, stubs, driver setup, catalogue ⊆ rules, and the whole translated fixture +
+  runtime compiled with javac against Playwright 1.63 + Cucumber 8.0.4. 46 tests green.
+
+## Next: phase 5
+
+- Generators writing a standalone Maven project (`convert <repo> --out <dir> --mode bdd|native`):
+  - common: translated sources, runtime sources in `<base>.support`, `pom.xml` (Playwright, JUnit,
+    Surefire with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, JUnit XML), `Jenkinsfile`, `README.md`,
+    `traceability.csv`, `conversion-report.md`, completeness gate (every test case has a test).
+  - bdd: copy features to `TestNaming.bddFeaturePath`, keep glue (cucumber-java/java8/picocontainer
+    8.0.4), generated `PlaywrightHooks` (session start/finish around each scenario) and a JUnit
+    Platform suite runner.
+  - native: per feature a JUnit class per `TestNaming`; strip Cucumber annotations, turn java8 lambda
+    steps into methods, `DataTable`/`Scenario` support types, hooks invoked by tag expression,
+    arguments converted at generation time; blocked tests fail with the reason.
