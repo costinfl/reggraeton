@@ -13,6 +13,7 @@
 
   <modules>
     <module>reggraeton-core</module>
+    <module>reggraeton-cli</module>
   </modules>
 
   <properties>

@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Runs the reggraeton CLI from a source checkout. Build it first with: mvn -q package -DskipTests
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+JAR="$DIR/reggraeton-cli/target/reggraeton.jar"
+if [ ! -f "$JAR" ]; then
+  echo "reggraeton.jar not found. Build it first: (cd \"$DIR\" && mvn -q package -DskipTests)" >&2
+  exit 1
+fi
+exec java ${REGGRAETON_JAVA_OPTS} -jar "$JAR" "$@"

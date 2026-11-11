@@ -8,8 +8,8 @@ point: pick up the first phase that isn't done.
 |---|-------|--------|
 | 1 | Project skeleton, scan model, Gherkin parsing, layout detection, sample fixture | done |
 | 2 | Step-definition / hook / parameter-type discovery, step matching, call graph | done |
-| 3 | `assess` command: inventory.json, HTML/MD report, call graph DOT/JSON, traceability.csv; CLI module | next |
-| 4 | Selenium → Playwright translation rule engine + runtime support sources | todo |
+| 3 | `assess` command: inventory.json, HTML/MD report, call graph DOT/JSON, traceability.csv; CLI module | done |
+| 4 | Selenium → Playwright translation rule engine + runtime support sources | next |
 | 5 | `convert --mode bdd` and `--mode native` generators, Jenkinsfile/README templates, completeness gate | todo |
 | 6 | `doctor`, demo web app, end-to-end run of both generated projects, docs | todo |
 
@@ -53,12 +53,26 @@ point: pick up the first phase that isn't done.
 - Glue outside the configured glue packages is ignored, as Cucumber does.
 - On the fixture: 19 step definitions, 3 hooks, 8 ready / 1 partial / 1 blocked test cases.
 
-## Next: phase 3
+## Phase 3 (done)
 
-- New module `reggraeton-cli` (picocli, shaded runnable jar) with `assess <repo> [--out dir]
-  [--classpath file]`.
-- Writers: `inventory.json`, `report.html` + `report.md` (totals, per-feature table, readiness per
-  scenario, undefined/ambiguous/unused, Selenium API histogram, manual work list with file:line),
-  `callgraph.dot` + `callgraph.json`, `traceability.csv` (test case id → planned Playwright test).
-- The planned test names must be the ones phase 5 generates: put the naming in one class
-  (`naming.TestNaming`) used by both.
+- `naming.TestNaming`: the one place that names generated tests (native: `<base>.features.<dir>.<Feature>Test#<scenario>`,
+  outline rows as `[n]` invocations; bdd: copied feature path + line). Common feature directory,
+  `src/*/resources` compaction for multi-module repos, collision handling, Java keyword safety.
+- `report`: `ReportData` (aggregates), `HtmlReport` (self-contained, light/dark, filterable tables,
+  per-scenario step → step definition details, works at phone width), `MarkdownReport`,
+  `CallGraphExport` (DOT + JSON, outline rows folded per scenario, only code reachable from used
+  glue), `Traceability` (CSV, RFC 4180), `AssessmentWriter`.
+- `reggraeton-cli`: picocli `assess` command (`--out`, `--classpath`, `--base-package`,
+  `--fail-on`), shaded `reggraeton.jar`, `bin/reggraeton` and `bin/reggraeton.cmd` launchers.
+- 37 tests green.
+
+## Next: phase 4
+
+- `reggraeton-runtime` sources (copied into generated projects, package `<base>.support`):
+  `PlaywrightSession` (browser from `-Dbrowser.channel` default `msedge` / `-Dbrowser.executable`,
+  `-Dheadless`, `-DbaseUrl`, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, trace + screenshot on failure),
+  `RunConfig`, `PendingConversionException`.
+- `translate` package: AST rewrite of reachable classes (JavaParser, LexicalPreservingPrinter where
+  possible) driven by the same API names as `SeleniumApiCatalog`; anything without a rule becomes
+  `// TODO(reggraeton)` + `throw new PendingConversionException(...)`.
+- Consistency test: every `auto` catalogue entry has a rule.
