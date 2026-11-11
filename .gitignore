@@ -1,0 +1,14 @@
+target/
+*.class
+*.log
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.DS_Store
+
+# default output locations of the CLI
+reggraeton-report/
+reggraeton-out/
