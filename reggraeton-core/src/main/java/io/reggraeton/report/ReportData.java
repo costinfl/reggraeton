@@ -1,0 +1,176 @@
+package io.reggraeton.report;
+
+import io.reggraeton.model.CallGraph;
+import io.reggraeton.model.CallGraph.ApiUsage;
+import io.reggraeton.model.FeatureFile;
+import io.reggraeton.model.Finding;
+import io.reggraeton.model.Inventory;
+import io.reggraeton.model.StepDefinition;
+import io.reggraeton.model.TestCase;
+import io.reggraeton.model.TestCaseAssessment;
+import io.reggraeton.model.TestStep;
+import io.reggraeton.naming.TestNaming;
+import io.reggraeton.scan.Assessor;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
+/** Aggregates of an {@link Inventory} shared by the Markdown and HTML reports. */
+public final class ReportData {
+
+    public record Totals(int features, int featuresWithErrors, int scenarios, int outlines, int testCases,
+                         int stepDefinitions, int hooks, int ready, int partial, int blocked,
+                         int errors, int warnings, int infos, int manualSites, int reachableMethods) {
+    }
+
+    public record FeatureRow(String path, String name, int testCases, int ready, int partial, int blocked,
+                             String error) {
+    }
+
+    public record TestRow(TestCase testCase, TestCaseAssessment assessment, TestNaming.GeneratedTest generated) {
+    }
+
+    public record ApiRow(String api, String category, String support, int sites, String note) {
+    }
+
+    public record StepDefinitionRow(StepDefinition definition, int uses) {
+    }
+
+    private final Inventory inventory;
+    private final TestNaming naming;
+    private final Totals totals;
+    private final List<FeatureRow> features = new ArrayList<>();
+    private final List<TestRow> tests = new ArrayList<>();
+    private final List<ApiRow> apis = new ArrayList<>();
+    private final List<StepDefinitionRow> stepDefinitions = new ArrayList<>();
+    private final Set<String> usedNodes = new LinkedHashSet<>();
+
+    public ReportData(Inventory inventory, TestNaming naming) {
+        this.inventory = inventory;
+        this.naming = naming;
+
+        Map<String, TestCaseAssessment> assessments = inventory.assessments().stream()
+                .collect(Collectors.toMap(TestCaseAssessment::testCaseId, a -> a, (a, b) -> a, LinkedHashMap::new));
+        for (TestCase tc : inventory.testCases()) {
+            tests.add(new TestRow(tc, assessments.get(tc.id()), naming.of(tc)));
+        }
+
+        for (FeatureFile f : inventory.features()) {
+            List<TestRow> rows = tests.stream().filter(t -> t.testCase().feature().equals(f.path())).collect(Collectors.toList());
+            features.add(new FeatureRow(f.path(), f.name(), rows.size(),
+                    count(rows, TestCaseAssessment.READY), count(rows, TestCaseAssessment.PARTIAL),
+                    count(rows, TestCaseAssessment.BLOCKED), f.parseError()));
+        }
+
+        Assessor assessor = new Assessor(inventory.callGraph());
+        for (TestCaseAssessment a : inventory.assessments()) {
+            a.stepDefinitionIds().forEach(id -> usedNodes.addAll(assessor.reachable(id)));
+            a.hookIds().forEach(id -> usedNodes.addAll(assessor.reachable(id)));
+        }
+        Map<String, int[]> siteCounts = new TreeMap<>();
+        Map<String, ApiUsage> sample = new HashMap<>();
+        for (CallGraph.Node node : inventory.callGraph().nodes()) {
+            if (!usedNodes.contains(node.id())) {
+                continue;
+            }
+            for (ApiUsage u : node.apiUsages()) {
+                String key = u.api() + "|" + u.support();
+                siteCounts.computeIfAbsent(key, k -> new int[1])[0]++;
+                sample.putIfAbsent(key, u);
+            }
+        }
+        siteCounts.forEach((key, count) -> {
+            ApiUsage u = sample.get(key);
+            apis.add(new ApiRow(u.api(), u.category(), u.support(), count[0], u.note()));
+        });
+        apis.sort(Comparator.comparing(ApiRow::support).reversed().thenComparing(ApiRow::sites, Comparator.reverseOrder())
+                .thenComparing(ApiRow::api));
+
+        Map<String, Integer> uses = new HashMap<>();
+        for (TestCase tc : inventory.testCases()) {
+            for (TestStep step : tc.steps()) {
+                if (step.match() != null) {
+                    step.match().stepDefinitionIds().forEach(id -> uses.merge(id, 1, Integer::sum));
+                }
+            }
+        }
+        for (StepDefinition d : inventory.stepDefinitions()) {
+            stepDefinitions.add(new StepDefinitionRow(d, uses.getOrDefault(d.id(), 0)));
+        }
+
+        long manualSites = apis.stream().filter(a -> ApiUsage.MANUAL.equals(a.support())).mapToInt(ApiRow::sites).sum();
+        long reachableMethods = inventory.callGraph().nodes().stream()
+                .filter(n -> usedNodes.contains(n.id()) && !"class".equals(n.kind())).count();
+        this.totals = new Totals(
+                inventory.features().size(),
+                (int) inventory.features().stream().filter(f -> f.parseError() != null).count(),
+                inventory.features().stream().mapToInt(f -> f.scenarios().size()).sum(),
+                (int) inventory.features().stream().flatMap(f -> f.scenarios().stream()).filter(s -> s.outline()).count(),
+                inventory.testCases().size(),
+                inventory.stepDefinitions().size(),
+                inventory.hooks().size(),
+                count(tests, TestCaseAssessment.READY),
+                count(tests, TestCaseAssessment.PARTIAL),
+                count(tests, TestCaseAssessment.BLOCKED),
+                severity("error"), severity("warning"), severity("info"),
+                (int) manualSites, (int) reachableMethods);
+    }
+
+    private static int count(List<TestRow> rows, String status) {
+        return (int) rows.stream().filter(r -> r.assessment() != null && status.equals(r.assessment().status())).count();
+    }
+
+    private int severity(String severity) {
+        return (int) inventory.findings().stream().filter(f -> severity.equals(f.severity())).count();
+    }
+
+    public Inventory inventory() {
+        return inventory;
+    }
+
+    public TestNaming naming() {
+        return naming;
+    }
+
+    public Totals totals() {
+        return totals;
+    }
+
+    public List<FeatureRow> features() {
+        return features;
+    }
+
+    public List<TestRow> tests() {
+        return tests;
+    }
+
+    public List<ApiRow> apis() {
+        return apis;
+    }
+
+    public List<StepDefinitionRow> stepDefinitions() {
+        return stepDefinitions;
+    }
+
+    public Set<String> usedNodes() {
+        return usedNodes;
+    }
+
+    /** Findings ordered by severity (errors first), then file and line. */
+    public List<Finding> findings() {
+        List<String> order = List.of("error", "warning", "info");
+        return inventory.findings().stream()
+                .sorted(Comparator.comparingInt((Finding f) -> order.indexOf(f.severity()))
+                        .thenComparing(f -> f.file() == null ? "" : f.file())
+                        .thenComparingInt(Finding::line))
+                .collect(Collectors.toList());
+    }
+}

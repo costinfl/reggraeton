@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Legacy Shop - Cart</title>
+  <link rel="stylesheet" href="shop.css">
+</head>
+<body>
+<header><strong>Your cart</strong><a href="products.html">Continue shopping</a></header>
+<main>
+  <div class="panel">
+    <table id="cart-items">
+      <thead><tr><th>Product</th><th>Quantity</th><th>Subtotal</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p>Total: <span id="total">0.00</span> EUR</p>
+    <label for="notes">Delivery note</label>
+    <textarea id="notes" rows="3" cols="40"></textarea>
+    <p><button id="checkout" type="button">Check out</button></p>
+    <div id="confirmation">Thank you for your order</div>
+  </div>
+</main>
+<script src="shop.js"></script>
+<script>
+  const body = document.querySelector('#cart-items tbody');
+  let total = 0;
+  for (const [name, quantity] of Object.entries(readCart())) {
+    const subtotal = priceOf(name) * quantity;
+    total += subtotal;
+    const tr = document.createElement('tr');
+    tr.className = 'item';
+    tr.innerHTML = '<td class="name"></td><td class="qty"></td><td class="subtotal"></td>';
+    tr.querySelector('.name').textContent = name;
+    tr.querySelector('.qty').textContent = String(quantity);
+    tr.querySelector('.subtotal').textContent = subtotal.toFixed(2);
+    body.appendChild(tr);
+  }
+  document.getElementById('total').textContent = total.toFixed(2);
+  document.getElementById('checkout').addEventListener('click', () => {
+    localStorage.setItem('lastOrderNote', document.getElementById('notes').value);
+    localStorage.removeItem('cart');
+    document.getElementById('confirmation').classList.add('visible');
+  });
+</script>
+</body>
+</html>

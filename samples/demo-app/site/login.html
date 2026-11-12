@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Legacy Shop - Login</title>
+  <link rel="stylesheet" href="shop.css">
+</head>
+<body>
+<header><strong>Legacy Shop</strong></header>
+<main>
+  <form id="login-form">
+    <h1>Log in</h1>
+    <label for="username">User name</label>
+    <input id="username" name="username" autocomplete="off">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password">
+    <p><button type="submit">Log in</button></p>
+    <div class="error-message" role="alert"></div>
+  </form>
+</main>
+<script>
+  const USERS = { alice: { password: 'secret123' }, bob: { password: 'secret123', locked: true } };
+  document.getElementById('login-form').addEventListener('submit', event => {
+    event.preventDefault();
+    const user = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const error = document.querySelector('.error-message');
+    const account = USERS[user];
+    if (!account || account.password !== password) {
+      error.textContent = 'Invalid username or password';
+      error.classList.add('visible');
+      return;
+    }
+    if (account.locked) {
+      error.textContent = 'Account locked';
+      error.classList.add('visible');
+      return;
+    }
+    localStorage.setItem('user', user);
+    location.href = 'products.html';
+  });
+</script>
+</body>
+</html>
