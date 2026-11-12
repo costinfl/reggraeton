@@ -169,6 +169,23 @@ class RuntimeTest {
 
     @Test
     @EnabledIfSystemProperty(named = "reggraeton.browserTests", matches = "true")
+    void selectQueriesUsedByTheTranslation() {
+        Page page = PlaywrightSession.start("select-queries").page();
+        page.setContent("<select id='c' multiple><option>Austria</option><option selected>Belgium</option>"
+                + "<option selected>Chile</option></select><select id='s'><option>One</option></select>");
+        Locator select = page.locator("#c");
+
+        assertThat(Elements.findAll(select.locator("option"))).hasSize(3);
+        assertThat(select.locator("option:checked").first().innerText()).isEqualTo("Belgium");
+        assertThat(Elements.findAll(select.locator("option:checked"))).hasSize(2);
+        assertThat(select.getAttribute("multiple") != null).isTrue();
+        assertThat(page.locator("#s").getAttribute("multiple") != null).isFalse();
+        select.selectOption(new String[0]);
+        assertThat(Elements.findAll(select.locator("option:checked"))).isEmpty();
+    }
+
+    @Test
+    @EnabledIfSystemProperty(named = "reggraeton.browserTests", matches = "true")
     void sendKeysTypesTextAndPressesKeys() {
         Page page = PlaywrightSession.start("send-keys").page();
         page.setContent("<input id='q' value='ab'><div id='log'></div>"

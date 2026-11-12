@@ -131,14 +131,15 @@ public final class SeleniumApiCatalog {
         auto("Select.selectByVisibleText", "locator.selectOption(new SelectOption().setLabel(text))");
         auto("Select.selectByValue", "locator.selectOption(value)");
         auto("Select.selectByIndex", "locator.selectOption(new SelectOption().setIndex(i))");
-        manual("Select.getFirstSelectedOption", "use locator.locator(\"option:checked\")");
-        manual("Select.getOptions", "use locator.locator(\"option\").all()");
-        manual("Select.getAllSelectedOptions", "use locator.locator(\"option:checked\").all()");
-        manual("Select.deselectAll", "use locator.selectOption(new String[0])");
+        auto("Select.getFirstSelectedOption", "locator.locator(\"option:checked\").first()");
+        auto("Select.getOptions", "Elements.findAll(locator.locator(\"option\"))");
+        auto("Select.getAllSelectedOptions", "Elements.findAll(locator.locator(\"option:checked\"))");
+        auto("Select.deselectAll", "locator.selectOption(new String[0])");
+        auto("Select.getWrappedElement", "the select locator itself");
         manual("Select.deselectByVisibleText", "rewrite with locator.selectOption(...)");
         manual("Select.deselectByValue", "rewrite with locator.selectOption(...)");
         manual("Select.deselectByIndex", "rewrite with locator.selectOption(...)");
-        manual("Select.isMultiple", "use locator.getAttribute(\"multiple\")");
+        auto("Select.isMultiple", "locator.getAttribute(\"multiple\") != null");
 
         // Actions
         auto("Actions.<init>", "action chain is rewritten as locator calls");

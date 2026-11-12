@@ -32,6 +32,22 @@ class ReportsTest {
     }
 
     @Test
+    void ranksManualWorkByTestsAffected() {
+        assertThat(data.impactByApi()).extracting(ReportData.ImpactByApi::api)
+                .containsExactlyInAnyOrder("Logs.get", "WebDriver.Options.logs", "LogEntries.getAll");
+        assertThat(data.impactByApi()).allSatisfy(row -> assertThat(row.testsAffected()).isEqualTo(1));
+        assertThat(data.impactBySite()).hasSize(3).allSatisfy(site -> {
+            assertThat(site.file()).endsWith("SearchSteps.java");
+            assertThat(site.testsAffected()).isEqualTo(1);
+        });
+
+        String html = HtmlReport.render(data);
+        assertThat(html).contains("id=\"impact\"").contains("Tests affected").contains("<details class=\"section\"")
+                .contains("data-status=\"partial\"").doesNotContain("max-width:1180px");
+        assertThat(MarkdownReport.render(data)).contains("## Manual work by impact").contains("| `Logs.get` | 1 | 1 |");
+    }
+
+    @Test
     void markdownAndHtmlEscapeContent() {
         String md = MarkdownReport.render(data);
         assertThat(md).contains("# reggraeton assessment").contains("| blocked |").contains("UNDEFINED_STEP");

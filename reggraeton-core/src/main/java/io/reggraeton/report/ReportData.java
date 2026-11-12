@@ -44,6 +44,17 @@ public final class ReportData {
     public record StepDefinitionRow(StepDefinition definition, int uses) {
     }
 
+    /**
+     * Manual work grouped by API: how many call sites, and how many test cases reach at least one of
+     * them (fixing all sites of this API makes that many tests stop depending on it).
+     */
+    public record ImpactByApi(String api, String category, String note, int sites, int testsAffected) {
+    }
+
+    /** One call site needing manual work and the number of test cases whose code reaches it. */
+    public record ImpactBySite(String api, String file, int line, String code, String note, int testsAffected) {
+    }
+
     private final Inventory inventory;
     private final TestNaming naming;
     private final Totals totals;
@@ -52,6 +63,8 @@ public final class ReportData {
     private final List<ApiRow> apis = new ArrayList<>();
     private final List<StepDefinitionRow> stepDefinitions = new ArrayList<>();
     private final Set<String> usedNodes = new LinkedHashSet<>();
+    private final List<ImpactByApi> impactByApi = new ArrayList<>();
+    private final List<ImpactBySite> impactBySite = new ArrayList<>();
 
     public ReportData(Inventory inventory, TestNaming naming) {
         this.inventory = inventory;
@@ -75,6 +88,8 @@ public final class ReportData {
             a.stepDefinitionIds().forEach(id -> usedNodes.addAll(assessor.reachable(id)));
             a.hookIds().forEach(id -> usedNodes.addAll(assessor.reachable(id)));
         }
+        computeImpact(assessor);
+
         Map<String, int[]> siteCounts = new TreeMap<>();
         Map<String, ApiUsage> sample = new HashMap<>();
         for (CallGraph.Node node : inventory.callGraph().nodes()) {
@@ -122,6 +137,64 @@ public final class ReportData {
                 count(tests, TestCaseAssessment.BLOCKED),
                 severity("error"), severity("warning"), severity("info"),
                 (int) manualSites, (int) reachableMethods);
+    }
+
+    /**
+     * For every manual call site reachable from some test case, the test cases that reach it. A site in
+     * shared code (a base page, a hook) can make thousands of tests "partial"; this ranks what to fix first.
+     */
+    private void computeImpact(Assessor assessor) {
+        Map<String, CallGraph.Node> nodesById = new HashMap<>();
+        inventory.callGraph().nodes().forEach(n -> nodesById.put(n.id(), n));
+        Map<String, java.util.BitSet> testsBySite = new HashMap<>();
+        Map<String, java.util.BitSet> testsByApi = new HashMap<>();
+        Map<String, ImpactBySite> siteInfo = new HashMap<>();
+        Map<String, ApiUsage> apiInfo = new HashMap<>();
+        Map<String, Integer> sitesPerApi = new HashMap<>();
+        for (int t = 0; t < tests.size(); t++) {
+            TestCaseAssessment a = tests.get(t).assessment();
+            if (a == null) {
+                continue;
+            }
+            Set<String> reached = new LinkedHashSet<>();
+            a.stepDefinitionIds().forEach(id -> reached.addAll(assessor.reachable(id)));
+            a.hookIds().forEach(id -> reached.addAll(assessor.reachable(id)));
+            for (String nodeId : reached) {
+                CallGraph.Node node = nodesById.get(nodeId);
+                if (node == null) {
+                    continue;
+                }
+                for (ApiUsage u : node.apiUsages()) {
+                    if (!ApiUsage.MANUAL.equals(u.support())) {
+                        continue;
+                    }
+                    String site = node.file() + ":" + u.line() + "|" + u.api();
+                    if (!siteInfo.containsKey(site)) {
+                        siteInfo.put(site, new ImpactBySite(u.api(), node.file(), u.line(), u.code(), u.note(), 0));
+                        sitesPerApi.merge(u.api(), 1, Integer::sum);
+                        apiInfo.putIfAbsent(u.api(), u);
+                    }
+                    testsBySite.computeIfAbsent(site, k -> new java.util.BitSet()).set(t);
+                    testsByApi.computeIfAbsent(u.api(), k -> new java.util.BitSet()).set(t);
+                }
+            }
+        }
+        siteInfo.forEach((site, info) -> impactBySite.add(new ImpactBySite(info.api(), info.file(), info.line(),
+                info.code(), info.note(), testsBySite.get(site).cardinality())));
+        impactBySite.sort(Comparator.comparingInt(ImpactBySite::testsAffected).reversed()
+                .thenComparing(ImpactBySite::file).thenComparingInt(ImpactBySite::line));
+        apiInfo.forEach((api, u) -> impactByApi.add(new ImpactByApi(api, u.category(), u.note(), sitesPerApi.get(api),
+                testsByApi.get(api).cardinality())));
+        impactByApi.sort(Comparator.comparingInt(ImpactByApi::testsAffected).reversed()
+                .thenComparing(ImpactByApi::sites, Comparator.reverseOrder()).thenComparing(ImpactByApi::api));
+    }
+
+    public List<ImpactByApi> impactByApi() {
+        return impactByApi;
+    }
+
+    public List<ImpactBySite> impactBySite() {
+        return impactBySite;
     }
 
     private static int count(List<TestRow> rows, String status) {

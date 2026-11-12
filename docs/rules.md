@@ -63,6 +63,12 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `SearchContext.findElement` | locator.locator(selector) |
 | `SearchContext.findElements` | locator.locator(selector).all() |
 | `Select.<init>` | dropped; calls become locator.selectOption(...) |
+| `Select.deselectAll` | locator.selectOption(new String[0]) |
+| `Select.getAllSelectedOptions` | Elements.findAll(locator.locator("option:checked")) |
+| `Select.getFirstSelectedOption` | locator.locator("option:checked").first() |
+| `Select.getOptions` | Elements.findAll(locator.locator("option")) |
+| `Select.getWrappedElement` | the select locator itself |
+| `Select.isMultiple` | locator.getAttribute("multiple") != null |
 | `Select.selectByIndex` | locator.selectOption(new SelectOption().setIndex(i)) |
 | `Select.selectByValue` | locator.selectOption(value) |
 | `Select.selectByVisibleText` | locator.selectOption(new SelectOption().setLabel(text)) |
@@ -136,14 +142,9 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `LogEntries.getAll` | browser logs: subscribe to page.onConsoleMessage(...) instead |
 | `LogEntries.iterator` | browser logs: subscribe to page.onConsoleMessage(...) instead |
 | `Logs.get` | browser logs: subscribe to page.onConsoleMessage(...) instead |
-| `Select.deselectAll` | use locator.selectOption(new String[0]) |
 | `Select.deselectByIndex` | rewrite with locator.selectOption(...) |
 | `Select.deselectByValue` | rewrite with locator.selectOption(...) |
 | `Select.deselectByVisibleText` | rewrite with locator.selectOption(...) |
-| `Select.getAllSelectedOptions` | use locator.locator("option:checked").all() |
-| `Select.getFirstSelectedOption` | use locator.locator("option:checked") |
-| `Select.getOptions` | use locator.locator("option").all() |
-| `Select.isMultiple` | use locator.getAttribute("multiple") |
 | `WebDriver.Options.addCookie` | use page.context().addCookies(...) |
 | `WebDriver.Options.deleteCookie` | use page.context().clearCookies(...) |
 | `WebDriver.Options.deleteCookieNamed` | use page.context().clearCookies(new ClearCookiesOptions().setName(..)) |

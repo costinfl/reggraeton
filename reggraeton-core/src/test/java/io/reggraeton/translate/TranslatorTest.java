@@ -210,6 +210,37 @@ class TranslatorTest {
     }
 
     @Test
+    void translatesSelectQueries(@TempDir Path dir) {
+        new TempRepo(dir).java("x", "Page4", imports() + """
+                public class Page4 {
+                    private WebDriver driver;
+                    public String read() {
+                        Select country = new Select(driver.findElement(By.id("country")));
+                        List<WebElement> options = country.getOptions();
+                        String first = new Select(driver.findElement(By.id("city"))).getFirstSelectedOption().getText();
+                        int selected = country.getAllSelectedOptions().size();
+                        if (country.isMultiple()) {
+                            country.deselectAll();
+                        }
+                        return options.get(0).getText() + first + selected + country.getWrappedElement().isEnabled();
+                    }
+                }
+                """);
+
+        TranslatedSource t = translate(dir).get("Page4");
+
+        assertThat(t.todos()).isEmpty();
+        assertThat(t.source())
+                .contains("Locator country = driver.locator(\"#country\");")
+                .contains("List<Locator> options = Elements.findAll(country.locator(\"option\"));")
+                .contains("String first = driver.locator(\"#city\").locator(\"option:checked\").first().innerText();")
+                .contains("int selected = Elements.findAll(country.locator(\"option:checked\")).size();")
+                .contains("if ((country.getAttribute(\"multiple\") != null)) {")
+                .contains("country.selectOption(new String[0]);")
+                .contains("country.isEnabled()");
+    }
+
+    @Test
     void runtimeSourcesArePureAscii() {
         // copied into generated projects and compiled with whatever encoding the user's tools default to
         java.util.Set<String> all = new java.util.TreeSet<>(SupportNames.RUNTIME_CLASSES);

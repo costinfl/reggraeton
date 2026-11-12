@@ -7,6 +7,7 @@ import io.reggraeton.model.StepMatch;
 import io.reggraeton.model.TestCaseAssessment;
 import io.reggraeton.model.TestStep;
 
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -54,13 +55,57 @@ public final class HtmlReport {
                     .append("<b>blocked</b>: undefined or ambiguous steps; generated as a failing test stating the reason.</p>");
         }
 
+        h.append("<div class=\"toolbar\"><button type=\"button\" data-sections=\"open\">Expand all sections</button>")
+                .append("<button type=\"button\" data-sections=\"close\">Collapse all sections</button></div>");
+
+        // manual work ranked by impact
+        List<ReportData.ImpactByApi> byApi = data.impactByApi();
+        List<ReportData.ImpactBySite> bySite = data.impactBySite();
+        openSection(h, "impact", "Manual work by impact", byApi.size() + " APIs, " + bySite.size() + " call sites", true);
+        h.append("<p class=\"muted small\">A test is <b>partial</b> as soon as any code it reaches needs manual work, so one ")
+                .append("call site in shared code (a base page, a hook) can make thousands of tests partial. ")
+                .append("<b>Tests affected</b> counts the test cases that reach the API or call site: fix from the top.</p>");
+        if (byApi.isEmpty()) {
+            h.append("<p>No manual work.</p>");
+        } else {
+            h.append("<h3>By API</h3><table><thead><tr><th>API</th><th>Category</th><th class=\"num\">Call sites</th>")
+                    .append("<th class=\"num\">Tests affected</th><th>What to do</th></tr></thead><tbody>");
+            for (ReportData.ImpactByApi row : byApi) {
+                h.append("<tr><td><code>").append(esc(row.api())).append("</code></td><td>").append(esc(row.category()))
+                        .append("</td><td class=\"num\">").append(row.sites()).append("</td><td class=\"num\">")
+                        .append(row.testsAffected()).append("</td><td>").append(esc(row.note())).append("</td></tr>");
+            }
+            h.append("</tbody></table>");
+            int shown = Math.min(bySite.size(), SITE_LIMIT);
+            h.append("<h3>By call site</h3>");
+            if (shown < bySite.size()) {
+                h.append("<p class=\"muted small\">The ").append(shown).append(" call sites affecting most tests, of ")
+                        .append(bySite.size()).append("; all of them are in the Findings section and in <code>inventory.json</code>.</p>");
+            }
+            h.append("<input class=\"filter\" placeholder=\"Filter call sites...\" data-target=\"sites\">")
+                    .append("<table id=\"sites\"><thead><tr><th class=\"num\">Tests affected</th><th>API</th><th>Location</th>")
+                    .append("<th>Code</th></tr></thead><tbody>");
+            for (ReportData.ImpactBySite site : bySite.subList(0, shown)) {
+                h.append("<tr><td class=\"num\">").append(site.testsAffected()).append("</td><td><code>").append(esc(site.api()))
+                        .append("</code></td><td><code>").append(esc(site.file() + ":" + site.line())).append("</code></td><td><code>")
+                        .append(esc(site.code())).append("</code></td></tr>");
+            }
+            h.append("</tbody></table>");
+        }
+        closeSection(h);
+
         // test cases
-        h.append("<section><h2>Test cases</h2><input class=\"filter\" placeholder=\"Filter test cases…\" data-target=\"tests\">");
-        h.append("<div class=\"scroll\"><table id=\"tests\"><thead><tr><th>Status</th><th>Scenario</th><th>Tags</th>")
+        openSection(h, "tests-section", "Test cases", String.valueOf(data.tests().size()), data.tests().size() <= OPEN_LIMIT);
+        h.append("<div class=\"filters\"><input class=\"filter\" placeholder=\"Filter test cases...\" data-target=\"tests\">")
+                .append("<select class=\"status-filter\" data-target=\"tests\" aria-label=\"status\">")
+                .append("<option value=\"\">all statuses</option><option>ready</option><option>partial</option><option>blocked</option>")
+                .append("</select></div>");
+        h.append("<table id=\"tests\"><thead><tr><th>Status</th><th>Scenario</th><th>Tags</th>")
                 .append("<th>Generated test</th><th class=\"num\">Manual</th></tr></thead><tbody>");
         for (ReportData.TestRow r : data.tests()) {
             TestCaseAssessment a = r.assessment();
-            h.append("<tr><td><span class=\"pill ").append(pillClass(a.status())).append("\">").append(a.status()).append("</span></td><td>")
+            h.append("<tr data-status=\"").append(a.status()).append("\"><td><span class=\"pill ").append(pillClass(a.status()))
+                    .append("\">").append(a.status()).append("</span></td><td>")
                     .append("<details><summary>").append(esc(r.testCase().name()))
                     .append(" <span class=\"muted\">").append(esc(r.testCase().id())).append("</span></summary>");
             h.append("<ol class=\"steps\">");
@@ -89,10 +134,13 @@ public final class HtmlReport {
                     .append(esc(r.generated().nativeName())).append("</code></td><td class=\"num\">")
                     .append(a.manualItems()).append("</td></tr>");
         }
-        h.append("</tbody></table></div></section>");
+        h.append("</tbody></table>");
+        closeSection(h);
 
         // features
-        h.append("<section><h2>Features</h2><div class=\"scroll\"><table><thead><tr><th>Feature</th><th>File</th>")
+        openSection(h, "features", "Features", String.valueOf(data.features().size()), data.features().size() <= OPEN_LIMIT);
+        h.append("<input class=\"filter\" placeholder=\"Filter features...\" data-target=\"feature-table\">")
+                .append("<table id=\"feature-table\"><thead><tr><th>Feature</th><th>File</th>")
                 .append("<th class=\"num\">Tests</th><th class=\"num\">Ready</th><th class=\"num\">Partial</th><th class=\"num\">Blocked</th></tr></thead><tbody>");
         for (ReportData.FeatureRow f : data.features()) {
             h.append("<tr><td>").append(f.error() != null ? "<span class=\"pill bad\">unparseable</span> " + esc(f.error()) : esc(f.name()))
@@ -100,27 +148,33 @@ public final class HtmlReport {
                     .append("</td><td class=\"num\">").append(f.ready()).append("</td><td class=\"num\">").append(f.partial())
                     .append("</td><td class=\"num\">").append(f.blocked()).append("</td></tr>");
         }
-        h.append("</tbody></table></div></section>");
+        h.append("</tbody></table>");
+        closeSection(h);
 
         // findings
-        h.append("<section><h2>Findings</h2>");
+        Map<String, Long> byCode = new java.util.TreeMap<>();
+        data.findings().forEach(f -> byCode.merge(f.severity() + " " + f.code(), 1L, Long::sum));
+        openSection(h, "findings-section", "Findings", String.valueOf(data.findings().size()), data.findings().size() <= OPEN_LIMIT);
         if (data.findings().isEmpty()) {
             h.append("<p>None.</p>");
         } else {
-            h.append("<input class=\"filter\" placeholder=\"Filter findings…\" data-target=\"findings\">")
-                    .append("<div class=\"scroll\"><table id=\"findings\"><thead><tr><th>Severity</th><th>Code</th><th>Location</th><th>Message</th></tr></thead><tbody>");
+            h.append("<p class=\"small\">");
+            byCode.forEach((code, n) -> h.append("<code>").append(esc(code)).append("</code> ").append(n).append(" &nbsp; "));
+            h.append("</p><input class=\"filter\" placeholder=\"Filter findings...\" data-target=\"findings\">")
+                    .append("<table id=\"findings\"><thead><tr><th>Severity</th><th>Code</th><th>Location</th><th>Message</th></tr></thead><tbody>");
             for (Finding f : data.findings()) {
                 h.append("<tr><td><span class=\"pill ").append(severityClass(f.severity())).append("\">").append(f.severity())
                         .append("</span></td><td><code>").append(esc(f.code())).append("</code></td><td><code>")
                         .append(f.file() == null ? "" : esc(f.file() + (f.line() > 0 ? ":" + f.line() : "")))
                         .append("</code></td><td>").append(esc(f.message())).append("</td></tr>");
             }
-            h.append("</tbody></table></div>");
+            h.append("</tbody></table>");
         }
-        h.append("</section>");
+        closeSection(h);
 
         // API usage
-        h.append("<section><h2>API usage in reachable code</h2><div class=\"scroll\"><table><thead><tr><th>API</th><th>Category</th>")
+        openSection(h, "apis", "API usage in reachable code", String.valueOf(data.apis().size()), true);
+        h.append("<table><thead><tr><th>API</th><th>Category</th>")
                 .append("<th>Conversion</th><th class=\"num\">Call sites</th><th>Note</th></tr></thead><tbody>");
         for (ReportData.ApiRow api : data.apis()) {
             h.append("<tr><td><code>").append(esc(api.api())).append("</code></td><td>").append(esc(api.category()))
@@ -128,21 +182,26 @@ public final class HtmlReport {
                     .append(api.support()).append("</span></td><td class=\"num\">").append(api.sites()).append("</td><td>")
                     .append(esc(api.note())).append("</td></tr>");
         }
-        h.append("</tbody></table></div></section>");
+        h.append("</tbody></table>");
+        closeSection(h);
 
         // step definitions
-        h.append("<section><h2>Step definitions</h2><input class=\"filter\" placeholder=\"Filter step definitions…\" data-target=\"stepdefs\">")
-                .append("<div class=\"scroll\"><table id=\"stepdefs\"><thead><tr><th>Pattern</th><th>Style</th><th class=\"num\">Uses</th><th>Location</th></tr></thead><tbody>");
-        for (ReportData.StepDefinitionRow s : data.stepDefinitions()) {
-            h.append("<tr><td><code>").append(esc(s.definition().expression())).append("</code></td><td>")
-                    .append(esc(s.definition().style())).append("</td><td class=\"num\">")
-                    .append(s.uses() == 0 ? "<span class=\"pill warn\">0</span>" : String.valueOf(s.uses()))
-                    .append("</td><td><code>").append(esc(s.definition().file() + ":" + s.definition().line())).append("</code></td></tr>");
+        openSection(h, "stepdefs-section", "Step definitions", String.valueOf(data.stepDefinitions().size()),
+                data.stepDefinitions().size() <= OPEN_LIMIT);
+        h.append("<input class=\"filter\" placeholder=\"Filter step definitions...\" data-target=\"stepdefs\">")
+                .append("<table id=\"stepdefs\"><thead><tr><th>Pattern</th><th>Style</th><th class=\"num\">Uses</th><th>Location</th></tr></thead><tbody>");
+        for (ReportData.StepDefinitionRow sd : data.stepDefinitions()) {
+            h.append("<tr><td><code>").append(esc(sd.definition().expression())).append("</code></td><td>")
+                    .append(esc(sd.definition().style())).append("</td><td class=\"num\">")
+                    .append(sd.uses() == 0 ? "<span class=\"pill warn\">0</span>" : String.valueOf(sd.uses()))
+                    .append("</td><td><code>").append(esc(sd.definition().file() + ":" + sd.definition().line())).append("</code></td></tr>");
         }
-        h.append("</tbody></table></div></section>");
+        h.append("</tbody></table>");
+        closeSection(h);
 
         // layout
-        h.append("<section><h2>Project layout</h2><dl>");
+        openSection(h, "layout", "Project layout", null, true);
+        h.append("<dl>");
         dl(h, "Build tool", layout.buildTool());
         dl(h, "Java source roots", String.join(", ", layout.javaSourceRoots()));
         dl(h, "Feature roots", String.join(", ", layout.featureRoots()));
@@ -150,10 +209,29 @@ public final class HtmlReport {
         dl(h, "Runners", String.join(", ", layout.runners()));
         dl(h, "Dependency injection", layout.dependencyInjection());
         h.append("</dl><p class=\"muted small\">Also written: <code>inventory.json</code> (complete model), ")
-                .append("<code>callgraph.dot</code> / <code>callgraph.json</code>, <code>traceability.csv</code>.</p></section>");
+                .append("<code>callgraph.dot</code> / <code>callgraph.json</code>, <code>traceability.csv</code>.</p>");
+        closeSection(h);
 
         h.append("</main><script>").append(JS).append("</script></body></html>\n");
         return h.toString();
+    }
+
+    /** Sections with more rows than this start collapsed. */
+    static final int OPEN_LIMIT = 300;
+    /** Call sites listed in the impact table. */
+    static final int SITE_LIMIT = 500;
+
+    private static void openSection(StringBuilder h, String id, String title, String count, boolean open) {
+        h.append("<details class=\"section\" id=\"").append(id).append('"').append(open ? " open" : "").append("><summary><h2>")
+                .append(esc(title));
+        if (count != null) {
+            h.append(" <span class=\"count\">").append(esc(count)).append("</span>");
+        }
+        h.append("</h2></summary><div class=\"section-body\">");
+    }
+
+    private static void closeSection(StringBuilder h) {
+        h.append("</div></details>");
     }
 
     private static String plural(int n, String word) {
@@ -223,7 +301,7 @@ public final class HtmlReport {
             @media (prefers-color-scheme: dark){:root{--bg:#161618;--fg:#ececee;--muted:#9a9aa1;--line:#2e2e33;--card:#1e1e21;\
             --ok:#6fd39f;--okbg:#173527;--warn:#f2c46b;--warnbg:#3a2f14;--bad:#f39a9c;--badbg:#3e1d1f;--info:#9cc0ea;--infobg:#1d2a3b;--code:#2a2a2e}}
             *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-            main{max-width:1180px;margin:0 auto;padding:24px 16px 64px}h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:36px 0 12px}
+            main{padding:24px clamp(16px,2vw,40px) 64px;min-width:min-content}h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:36px 0 12px}
             .muted{color:var(--muted)}.small{font-size:13px}code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--code);padding:1px 5px;border-radius:4px;word-break:break-word}
             .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:20px}
             .tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
@@ -232,7 +310,13 @@ public final class HtmlReport {
             .bar{display:flex;height:26px;border-radius:6px;overflow:hidden;margin:18px 0 6px;border:1px solid var(--line);font-size:12px}
             .bar span{display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden}
             .bar .ok{background:var(--okbg);color:var(--ok)}.bar .warn{background:var(--warnbg);color:var(--warn)}.bar .bad{background:var(--badbg);color:var(--bad)}
-            .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+            details.section{margin-top:28px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+            details.section>summary{cursor:pointer;padding:10px 16px;list-style-position:inside}
+            details.section>summary h2{display:inline;font-size:19px;margin:0}.count{color:var(--muted);font-weight:400;font-size:15px}
+            .section-body{padding:4px 16px 16px}h3{font-size:16px;margin:18px 0 8px}
+            .toolbar{margin-top:20px;display:flex;gap:8px;flex-wrap:wrap}.toolbar button{font:inherit;padding:5px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer}
+            .filters{display:flex;gap:8px;flex-wrap:wrap}.status-filter{padding:7px 10px;margin:0 0 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
+            table{border:1px solid var(--line)}
             table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
             th{font-size:13px;color:var(--muted);font-weight:600}tr:last-child td{border-bottom:0}.num{text-align:right;font-variant-numeric:tabular-nums}
             .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600}
@@ -242,16 +326,28 @@ public final class HtmlReport {
             .filter{width:100%;max-width:360px;padding:7px 10px;margin:0 0 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
             dl{display:grid;grid-template-columns:minmax(0,max-content) minmax(0,1fr);gap:6px 16px}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
             @media (max-width:600px){dl{grid-template-columns:1fr}dd{margin-bottom:8px}}
+            code{word-break:normal;white-space:pre-wrap}
             header p{overflow-wrap:anywhere}
             """;
 
     private static final String JS = """
-            document.querySelectorAll('input.filter').forEach(function(input){
-              input.addEventListener('input',function(){
-                var q=input.value.toLowerCase();
-                document.querySelectorAll('#'+input.dataset.target+' tbody tr').forEach(function(tr){
-                  tr.style.display=tr.textContent.toLowerCase().indexOf(q)>=0?'':'none';
-                });
+            function applyFilters(table){
+              var text=document.querySelector('input.filter[data-target="'+table+'"]');
+              var status=document.querySelector('select.status-filter[data-target="'+table+'"]');
+              var q=text?text.value.toLowerCase():'';
+              var st=status?status.value:'';
+              document.querySelectorAll('#'+table+' > tbody > tr').forEach(function(tr){
+                var ok=tr.textContent.toLowerCase().indexOf(q)>=0 && (!st || tr.dataset.status===st);
+                tr.style.display=ok?'':'none';
+              });
+            }
+            document.querySelectorAll('input.filter, select.status-filter').forEach(function(el){
+              el.addEventListener(el.tagName==='SELECT'?'change':'input',function(){applyFilters(el.dataset.target);});
+            });
+            document.querySelectorAll('button[data-sections]').forEach(function(button){
+              button.addEventListener('click',function(){
+                var open=button.dataset.sections==='open';
+                document.querySelectorAll('details.section').forEach(function(d){d.open=open;});
               });
             });
             """;

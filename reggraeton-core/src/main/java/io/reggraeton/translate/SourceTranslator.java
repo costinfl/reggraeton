@@ -86,6 +86,8 @@ final class SourceTranslator {
             "WebDriver.Timeouts.scriptTimeout", "WebDriver.Timeouts.setScriptTimeout",
             "WebDriver.TargetLocator.activeElement", "JavascriptExecutor.executeScript", "TakesScreenshot.getScreenshotAs",
             "Select.<init>", "Select.selectByVisibleText", "Select.selectByValue", "Select.selectByIndex",
+            "Select.getOptions", "Select.getFirstSelectedOption", "Select.getAllSelectedOptions", "Select.deselectAll",
+            "Select.isMultiple", "Select.getWrappedElement",
             "Actions.<init>", "Actions.moveToElement", "Actions.click", "Actions.doubleClick", "Actions.contextClick",
             "Actions.dragAndDrop", "Actions.sendKeys", "Actions.scrollToElement", "Actions.perform", "Actions.build",
             "Action.perform",
@@ -946,6 +948,22 @@ final class SourceTranslator {
                 return call(s, "selectOption", args.get(0));
             case "Select.selectByIndex":
                 return call(s, "selectOption", parse("new SelectOption().setIndex(" + args.get(0) + ")"));
+            case "Select.getOptions":
+                return new MethodCallExpr(new NameExpr("Elements"), "findAll",
+                        new NodeList<>(call(s, "locator", Selectors.literal("option"))));
+            case "Select.getAllSelectedOptions":
+                return new MethodCallExpr(new NameExpr("Elements"), "findAll",
+                        new NodeList<>(call(s, "locator", Selectors.literal("option:checked"))));
+            case "Select.getFirstSelectedOption":
+                return call(call(s, "locator", Selectors.literal("option:checked")), "first");
+            case "Select.deselectAll":
+                return call(s, "selectOption", parse("new String[0]"));
+            case "Select.isMultiple":
+                return new com.github.javaparser.ast.expr.EnclosedExpr(new BinaryExpr(
+                        call(s, "getAttribute", Selectors.literal("multiple")), new com.github.javaparser.ast.expr.NullLiteralExpr(),
+                        BinaryExpr.Operator.NOT_EQUALS));
+            case "Select.getWrappedElement":
+                return s.clone();
             case "FluentWait.until": {
                 MethodCallExpr condition = (MethodCallExpr) args.get(0);
                 MethodCallExpr wait = new MethodCallExpr(s, CONDITIONS.get(condition.getNameAsString()));

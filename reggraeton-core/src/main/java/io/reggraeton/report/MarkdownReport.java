@@ -51,6 +51,27 @@ public final class MarkdownReport {
         row(md, "Test libraries", libs, false);
         md.append("\n");
 
+        md.append("## Manual work by impact\n\n");
+        if (data.impactByApi().isEmpty()) {
+            md.append("No manual work.\n\n");
+        } else {
+            md.append("One call site in shared code can make many tests partial; *Tests affected* counts the test cases ")
+                    .append("that reach it. Fix from the top.\n\n");
+            md.append("| API | Call sites | Tests affected | What to do |\n|---|---:|---:|---|\n");
+            for (ReportData.ImpactByApi row : data.impactByApi()) {
+                md.append("| `").append(row.api()).append("` | ").append(row.sites()).append(" | ").append(row.testsAffected())
+                        .append(" | ").append(cell(row.note())).append(" |\n");
+            }
+            int shown = Math.min(data.impactBySite().size(), 100);
+            md.append("\nTop ").append(shown).append(" of ").append(data.impactBySite().size()).append(" call sites:\n\n");
+            md.append("| Tests affected | API | Location | Code |\n|---:|---|---|---|\n");
+            for (ReportData.ImpactBySite site : data.impactBySite().subList(0, shown)) {
+                md.append("| ").append(site.testsAffected()).append(" | `").append(site.api()).append("` | `").append(site.file())
+                        .append(':').append(site.line()).append("` | `").append(cell(site.code())).append("` |\n");
+            }
+            md.append('\n');
+        }
+
         md.append("## Features\n\n");
         md.append("| Feature | File | Tests | Ready | Partial | Blocked |\n|---|---|---:|---:|---:|---:|\n");
         for (ReportData.FeatureRow f : data.features()) {
