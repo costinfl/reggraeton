@@ -19,8 +19,38 @@ Requires JDK 17+ and Maven 3.9+.
 
 ```
 mvn package            # builds and runs the tests; produces reggraeton-cli/target/reggraeton.jar
-bin/reggraeton --help  # bin\reggraeton.cmd on Windows (or: java -jar reggraeton-cli/target/reggraeton.jar)
+bin/reggraeton --help  # Windows: .\bin\reggraeton.ps1 or bin\reggraeton.cmd
 ```
+
+### Choosing the Java installation
+
+Java does not need to be on the `PATH`. If several JDKs are installed, pick one once per checkout:
+
+```
+.\bin\setup-java.ps1              # Windows PowerShell: lists the installed JDKs, you choose
+bin/setup-java.sh                 # Linux / macOS
+.\bin\setup-java.ps1 -JavaHome 'C:\Program Files\Eclipse Adoptium\jdk-21.0.5.11-hotspot'   # no questions
+```
+
+Setup looks in the usual places (Program Files vendors such as Eclipse Adoptium, Microsoft,
+Zulu, Corretto, Oracle; IntelliJ's `.jdks`; Scoop; the JavaSoft registry keys; `/usr/lib/jvm`,
+`/Library/Java/JavaVirtualMachines`, SDKMAN; `JAVA_HOME` and the `PATH`), shows each JDK's
+version, rejects anything older than 17 and saves the choice in `.reggraeton/java-home`
+(git-ignored). Nothing system-wide is changed.
+
+Every launcher and script then finds Java in this order: `REGGRAETON_JAVA_HOME` (one-off
+override), the saved choice, `JAVA_HOME`, `java` on the `PATH`.
+
+Maven needs the JDK too. Make the chosen JDK the session's Java (this session only):
+
+```
+. .\bin\java-env.ps1; mvn package      # PowerShell (note the leading dot)
+. bin/java-env.sh && mvn package       # sh / bash
+```
+
+If PowerShell refuses to run the scripts, allow them for the session with
+`Set-ExecutionPolicy -Scope Process Bypass`, or run
+`powershell -ExecutionPolicy Bypass -File .\bin\setup-java.ps1`.
 
 ## 1. Assess a repository
 
@@ -122,6 +152,7 @@ mvn test                                              # unit + integration tests
 mvn test -pl reggraeton-runtime -Dreggraeton.browserTests=true -Dbrowser.channel=msedge
 scripts/e2e.sh                                        # full end-to-end check against the demo shop
 BROWSER_CHANNEL=chromium HEADLESS=false scripts/e2e.sh
+.\scripts\e2e.ps1                                     # the same from PowerShell
 ```
 
 `scripts/e2e.sh` builds reggraeton, starts `samples/demo-app` (JDK-only server), converts

@@ -12,6 +12,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Java: REGGRAETON_JAVA_HOME, the JDK saved by bin/setup-java.sh, JAVA_HOME or the PATH; Maven uses the same one
+. "$ROOT/bin/resolve-java.sh"
+reggraeton_resolve_java "$0" || exit 1
+if [ -n "$REGGRAETON_JDK_HOME" ]; then
+  export JAVA_HOME="$REGGRAETON_JDK_HOME"
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
+echo "== using Java: $REGGRAETON_JAVA"
 PORT="${PORT:-8080}"
 export BROWSER_CHANNEL="${BROWSER_CHANNEL:-msedge}"
 export BASE_URL="http://localhost:${PORT}"
@@ -22,7 +30,7 @@ echo "== building reggraeton"
 mvn -q -B -f "$ROOT/pom.xml" install -DskipTests
 
 echo "== starting the demo shop on port $PORT"
-java "$ROOT/samples/demo-app/DemoServer.java" "$PORT" "$ROOT/samples/demo-app/site" > "$WORK/server.log" 2>&1 &
+"$REGGRAETON_JAVA" "$ROOT/samples/demo-app/DemoServer.java" "$PORT" "$ROOT/samples/demo-app/site" > "$WORK/server.log" 2>&1 &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null || true' EXIT
 for _ in $(seq 1 60); do

@@ -1,9 +1,14 @@
 #!/usr/bin/env sh
-# Runs the reggraeton CLI from a source checkout. Build it first with: mvn -q package -DskipTests
+# Runs the reggraeton CLI from a source checkout, with the JDK chosen by bin/setup-java.sh
+# (see bin/resolve-java.sh for the lookup order). Build it first:
+#   . bin/java-env.sh && mvn -q package -DskipTests
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
+. "$DIR/bin/resolve-java.sh"
+reggraeton_resolve_java "$0" || exit 1
 JAR="$DIR/reggraeton-cli/target/reggraeton.jar"
 if [ ! -f "$JAR" ]; then
-  echo "reggraeton.jar not found. Build it first: (cd \"$DIR\" && mvn -q package -DskipTests)" >&2
+  echo "reggraeton.jar not found. Build it first: . bin/java-env.sh && mvn -q package -DskipTests" >&2
   exit 1
 fi
-exec java ${REGGRAETON_JAVA_OPTS} -jar "$JAR" "$@"
+# shellcheck disable=SC2086
+exec "$REGGRAETON_JAVA" ${REGGRAETON_JAVA_OPTS} -jar "$JAR" "$@"
