@@ -210,6 +210,16 @@ class TranslatorTest {
     }
 
     @Test
+    void runtimeSourcesArePureAscii() {
+        // copied into generated projects and compiled with whatever encoding the user's tools default to
+        java.util.Set<String> all = new java.util.TreeSet<>(SupportNames.RUNTIME_CLASSES);
+        all.addAll(SupportNames.NATIVE_CLASSES);
+        all.addAll(SupportNames.BDD_CLASSES);
+        RuntimeSources.load(SUPPORT, all).forEach((name, source) ->
+                assertThat(source.chars().allMatch(c -> c < 128)).as(name + ".java is ASCII only").isTrue());
+    }
+
+    @Test
     void everyAutomaticCatalogueEntryHasARule() {
         Set<String> auto = SeleniumApiCatalog.entries().entrySet().stream()
                 .filter(e -> e.getValue().auto())
