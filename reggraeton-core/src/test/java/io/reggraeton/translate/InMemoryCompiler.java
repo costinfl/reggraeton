@@ -31,13 +31,13 @@ final class InMemoryCompiler {
             for (Map.Entry<String, String> e : sources.entrySet()) {
                 Path file = src.resolve(e.getKey());
                 Files.createDirectories(file.getParent());
-                Files.writeString(file, e.getValue());
+                Files.writeString(file, e.getValue(), java.nio.charset.StandardCharsets.UTF_8);
                 files.add(file);
             }
             JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
             DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-            try (StandardJavaFileManager fm = compiler.getStandardFileManager(diagnostics, null, null)) {
-                List<String> options = List.of("-d", out.toString(), "-classpath", System.getProperty("java.class.path"),
+            try (StandardJavaFileManager fm = compiler.getStandardFileManager(diagnostics, null, java.nio.charset.StandardCharsets.UTF_8)) {
+                List<String> options = List.of("-encoding", "UTF-8", "-d", out.toString(), "-classpath", System.getProperty("java.class.path"),
                         "--release", "17", "-proc:none", "-Xlint:none");
                 boolean ok = compiler.getTask(null, fm, diagnostics, options, null,
                         fm.getJavaFileObjectsFromPaths(files)).call();
