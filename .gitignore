@@ -12,3 +12,6 @@ target/
 # default output locations of the CLI
 reggraeton-report/
 reggraeton-out/
+
+# per-checkout settings written by bin/setup-java.*
+.reggraeton/
