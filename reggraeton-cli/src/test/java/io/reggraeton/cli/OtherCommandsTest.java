@@ -20,8 +20,10 @@ class OtherCommandsTest {
     @Test
     void doctorKnowsWhereEdgeLivesOnEachOs() {
         assertThat(DoctorCommand.candidates("windows 11")).extracting(DoctorCommand.Candidate::channel).contains("msedge");
-        assertThat(DoctorCommand.candidates("mac os x")).extracting(c -> c.path().toString())
-                .contains("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge");
+        // compare Paths, not strings: the test may run on another OS than the one asked for,
+        // and Path renders separators for the OS it runs on
+        assertThat(DoctorCommand.candidates("mac os x")).extracting(DoctorCommand.Candidate::path)
+                .contains(Path.of("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"));
         assertThat(DoctorCommand.candidates("linux")).extracting(DoctorCommand.Candidate::path)
                 .contains(Path.of("/opt/microsoft/msedge/msedge"));
         // exit code depends on the machine; it must run without launching or downloading anything
