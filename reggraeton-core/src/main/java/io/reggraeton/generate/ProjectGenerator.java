@@ -113,7 +113,17 @@ public final class ProjectGenerator {
 
         ReportData report = new ReportData(inventory, naming);
         files.put("traceability.csv", Traceability.csv(report));
-        files.put("pom.xml", ProjectFiles.pom(options, inventory.layout(), lambdaGlue && options.mode() == ConvertOptions.Mode.BDD));
+        boolean keptExternal = inventory.callGraph().nodes().stream()
+                .filter(n -> used.contains(n.id()))
+                .flatMap(n -> n.apiUsages().stream())
+                .anyMatch(u -> io.reggraeton.model.CallGraph.ApiUsage.EXTERNAL_KEPT.equals(u.category()));
+        ProjectFiles.Carried carried = keptExternal ? ProjectFiles.carriedDependencies(inventory.layout()) : null;
+        if (carried != null && !carried.withoutVersion().isEmpty()) {
+            problems.add("Original dependencies with unknown version (not added to pom.xml): "
+                    + String.join(", ", carried.withoutVersion()));
+        }
+        files.put("pom.xml", ProjectFiles.pom(options, inventory.layout(), lambdaGlue && options.mode() == ConvertOptions.Mode.BDD,
+                carried));
         files.put("Jenkinsfile", ProjectFiles.jenkinsfile());
         files.put(".gitignore", ProjectFiles.gitignore());
         files.put("README.md", ProjectFiles.readme(options, generatedIds.size(), todos.size(), blocked));

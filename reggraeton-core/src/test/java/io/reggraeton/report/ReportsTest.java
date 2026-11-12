@@ -23,7 +23,7 @@ class ReportsTest {
     @Test
     void totalsMatchTheInventory() {
         ReportData.Totals t = data.totals();
-        assertThat(t.testCases()).isEqualTo(10);
+        assertThat(t.testCases()).isEqualTo(12);
         assertThat(t.ready() + t.partial() + t.blocked()).isEqualTo(t.testCases());
         assertThat(t.outlines()).isEqualTo(1);
         assertThat(t.manualSites()).isEqualTo(4);
@@ -61,7 +61,7 @@ class ReportsTest {
     void callGraphExportFoldsOutlineRowsIntoOneScenario() {
         CallGraphExport.Export export = CallGraphExport.export(inventory, data.usedNodes());
 
-        assertThat(export.scenarios()).hasSize(8);
+        assertThat(export.scenarios()).hasSize(10);
         assertThat(export.scenarios()).filteredOn(s -> s.name().equals("Rejected login"))
                 .singleElement().satisfies(s -> assertThat(s.testCaseIds()).hasSize(3));
         // the unused "I log out" step and its code are not part of the exported graph

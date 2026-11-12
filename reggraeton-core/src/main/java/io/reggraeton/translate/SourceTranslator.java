@@ -36,8 +36,10 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.UnionType;
 import io.reggraeton.model.CallGraph.ApiUsage;
 import io.reggraeton.scan.java.ApiClassifier;
+import io.reggraeton.scan.java.DialogTriggers;
 import io.reggraeton.scan.java.Expressions;
 import io.reggraeton.scan.java.JavaSourceIndex;
+import io.reggraeton.scan.java.JavaTypes;
 import io.reggraeton.scan.java.SeleniumApiCatalog;
 
 import java.util.ArrayList;
@@ -88,6 +90,8 @@ final class SourceTranslator {
             "Select.<init>", "Select.selectByVisibleText", "Select.selectByValue", "Select.selectByIndex",
             "Select.getOptions", "Select.getFirstSelectedOption", "Select.getAllSelectedOptions", "Select.deselectAll",
             "Select.isMultiple", "Select.getWrappedElement",
+            "WebDriver.TargetLocator.alert", "Alert.accept", "Alert.getText", "Alert.dismiss", "Alert.sendKeys",
+            "ExpectedConditions.alertIsPresent",
             "Actions.<init>", "Actions.moveToElement", "Actions.click", "Actions.doubleClick", "Actions.contextClick",
             "Actions.dragAndDrop", "Actions.sendKeys", "Actions.scrollToElement", "Actions.perform", "Actions.build",
             "Action.perform",
@@ -114,7 +118,7 @@ final class SourceTranslator {
             Map.entry("urlToBe", "urlIs"), Map.entry("urlMatches", "urlMatches"),
             Map.entry("numberOfElementsToBe", "count"), Map.entry("elementToBeSelected", "selected"),
             Map.entry("attributeToBe", "attribute"), Map.entry("visibilityOfAllElementsLocatedBy", "allVisible"),
-            Map.entry("presenceOfAllElementsLocatedBy", "allPresent"));
+            Map.entry("presenceOfAllElementsLocatedBy", "allPresent"), Map.entry("alertIsPresent", "alert"));
 
     /** Selenium {@code Keys} constants with a direct Playwright key name. */
     private static final Map<String, String> KEYS = Map.ofEntries(
@@ -146,6 +150,7 @@ final class SourceTranslator {
         TYPE_MAP.put("org.openqa.selenium.support.ui.FluentWait", "Waits");
         TYPE_MAP.put("org.openqa.selenium.support.ui.Wait", "Waits");
         TYPE_MAP.put("org.openqa.selenium.Keys", "Keys");
+        TYPE_MAP.put("org.openqa.selenium.Alert", "Alert");
         TYPE_MAP.put("org.openqa.selenium.TimeoutException", "TimeoutError");
         for (String e : List.of("NoSuchElementException", "StaleElementReferenceException", "WebDriverException",
                 "ElementNotInteractableException", "ElementClickInterceptedException", "InvalidElementStateException",
@@ -170,6 +175,8 @@ final class SourceTranslator {
     private final Map<Node, String> manualNotes = new IdentityHashMap<>();
     private final Set<Node> chainMembers = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<Node> stringArguments = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** Alert.dismiss / Alert.sendKeys call to the statement that opens the dialog. */
+    private final Map<Node, Statement> dialogTriggers = new IdentityHashMap<>();
     private final Map<String, Integer> changes = new TreeMap<>();
     private final List<TranslatedSource.Todo> todos = new ArrayList<>();
 
@@ -217,6 +224,7 @@ final class SourceTranslator {
         }
 
         // ---- pass 2: apply ----------------------------------------------------------------
+        insertDialogExpectations();
         applyManualStubs();
         convertFindByFields(fieldPages);
         for (Node node : postOrder) {
@@ -267,7 +275,8 @@ final class SourceTranslator {
         if (index.isProjectType(type)) {
             return;
         }
-        ApiUsage usage = ApiClassifier.classify(type, name, JavaTypes.code(call), JavaSourceIndex.lineOf(call), call);
+        ApiUsage usage = ApiClassifier.classify(type, name, JavaTypes.code(call), JavaSourceIndex.lineOf(call), call,
+                index.policy());
         if (usage == null) {
             return;
         }
@@ -284,7 +293,7 @@ final class SourceTranslator {
             return;
         }
         ApiUsage usage = ApiClassifier.classify(type.get(), "<init>", JavaTypes.code(creation),
-                JavaSourceIndex.lineOf(creation), null);
+                JavaSourceIndex.lineOf(creation), creation, index.policy());
         if (usage != null) {
             infos.put(creation, new CallInfo(usage.category(), usage.api(), ApiUsage.AUTO.equals(usage.support()), usage.note()));
         }
@@ -357,6 +366,17 @@ final class SourceTranslator {
                 || "timing".equals(info.category())) {
             return;
         }
+        if (ApiUsage.EXTERNAL_KEPT.equals(info.category())) {
+            return;
+        }
+        if (ApiUsage.EXTERNAL_DROPPED.equals(info.category())) {
+            if (isWholeStatement(node)) {
+                plans.put(node, Plan.REMOVE_STATEMENT);
+            } else {
+                manual(node, info.api() + " is configured to be dropped, but its result is used");
+            }
+            return;
+        }
         if (ApiUsage.EXTERNAL.equals(info.category()) || !info.auto() && !ApiUsage.DRIVER_SETUP.equals(info.category())) {
             manual(node, info.note());
             return;
@@ -416,6 +436,11 @@ final class SourceTranslator {
                 } else {
                     manual(node, "getScreenshotAs with an unsupported OutputType");
                 }
+            }
+            case "Alert.dismiss", "Alert.sendKeys" -> {
+                // the catalogue only rates these auto when the triggering statement was found
+                DialogTriggers.triggerFor((MethodCallExpr) node).ifPresent(t -> dialogTriggers.put(node, t));
+                plans.put(node, Plan.REWRITE);
             }
             case "FluentWait.until" -> {
                 MethodCallExpr call = (MethodCallExpr) node;
@@ -519,6 +544,32 @@ final class SourceTranslator {
                 && v.getParentNode().orElse(null) instanceof VariableDeclarationExpr decl
                 && decl.getVariables().size() == 1
                 && decl.getParentNode().orElse(null) instanceof ExpressionStmt;
+    }
+
+    // =========================================================================================
+    // Pass 2: dialogs answered before the action that opens them
+    // =========================================================================================
+
+    private void insertDialogExpectations() {
+        Set<String> done = new HashSet<>();
+        for (Map.Entry<Node, Statement> entry : dialogTriggers.entrySet()) {
+            MethodCallExpr call = (MethodCallExpr) entry.getKey();
+            Statement trigger = entry.getValue();
+            if (!(trigger.getParentNode().orElse(null) instanceof BlockStmt block)) {
+                continue;
+            }
+            MethodCallExpr expectation = call.getNameAsString().equals("dismiss")
+                    ? new MethodCallExpr(new NameExpr("Dialogs"), "expectDismiss")
+                    : new MethodCallExpr(new NameExpr("Dialogs"), "expectPrompt", new NodeList<>(call.getArgument(0).clone()));
+            if (!done.add(System.identityHashCode(trigger) + "|" + expectation)) {
+                continue;
+            }
+            ExpressionStmt stmt = new ExpressionStmt(expectation);
+            stmt.setComment(new LineComment(" reggraeton: Playwright answers dialogs while open; "
+                    + call.getNameAsString() + "() at line " + JavaSourceIndex.lineOf(call) + " needs this before the action"));
+            block.getStatements().addBefore(stmt, trigger);
+            changes.merge("Dialogs." + expectation.getNameAsString() + "() inserted before the triggering action", 1, Integer::sum);
+        }
     }
 
     // =========================================================================================
@@ -948,6 +999,10 @@ final class SourceTranslator {
                 return call(s, "selectOption", args.get(0));
             case "Select.selectByIndex":
                 return call(s, "selectOption", parse("new SelectOption().setIndex(" + args.get(0) + ")"));
+            case "WebDriver.TargetLocator.alert":
+                return new MethodCallExpr(new NameExpr("Dialogs"), "alert", new NodeList<>(scopeOf(s).clone()));
+            case "Alert.accept", "Alert.getText", "Alert.dismiss", "Alert.sendKeys":
+                return call;
             case "Select.getOptions":
                 return new MethodCallExpr(new NameExpr("Elements"), "findAll",
                         new NodeList<>(call(s, "locator", Selectors.literal("option"))));

@@ -108,6 +108,32 @@ Code without an automatic Playwright equivalent is never dropped silently: it be
 file:line) until it is rewritten, so affected tests fail rather than pass. Steps without a step
 definition produce failing tests that say so. See [docs/rules.md](docs/rules.md) for the rules.
 
+## Calls into other libraries (`reggraeton.properties`)
+
+Calls into libraries outside the scanned repository are **kept unchanged** when no Selenium
+object is passed to or returned from them (logging, test data, string helpers ...); the
+generated `pom.xml` then also carries the original project's other dependencies. Calls that do
+take or return Selenium objects (`Evidence.attach(driver)`) are left for manual conversion.
+Override this per package, class or method in `reggraeton.properties` in the scanned repository's
+root (or `--config <file>`); see [docs/reggraeton.properties.example](docs/reggraeton.properties.example):
+
+```
+external.keep   = com.acme.util
+external.drop   = com.acme.qa.Evidence.attach
+external.manual = com.acme.legacy
+```
+
+## JavaScript dialogs (alert / confirm / prompt)
+
+Selenium handles a dialog after it opened (`driver.switchTo().alert().accept()`); Playwright has
+to answer while it is open, and an open dialog blocks the page. Generated tests therefore answer
+every dialog the moment it opens (accept by default; `-Ddialogs=dismiss` changes that) and record
+it. `switchTo().alert()` becomes `Dialogs.alert(page)`: `getText()` returns the recorded message and
+`accept()` checks it was accepted. For `dismiss()` and prompt answers (`sendKeys`), reggraeton
+inserts `Dialogs.expectDismiss()` / `Dialogs.expectPrompt(text)` before the action that opens the
+dialog when that action is in the same method; otherwise the call is reported as manual work, and
+at run time a mismatch fails with a message saying where to put the expectation.
+
 ## No browser downloads
 
 - Generated tests launch only an installed Chromium-based browser: the `msedge` channel by
@@ -156,7 +182,7 @@ BROWSER_CHANNEL=chromium HEADLESS=false scripts/e2e.sh
 ```
 
 `scripts/e2e.sh` builds reggraeton, starts `samples/demo-app` (JDK-only server), converts
-`samples/legacy-shop` in both modes and runs the generated tests: 10 tests per mode, 8 pass and 2
+`samples/legacy-shop` in both modes and runs the generated tests: 12 tests per mode, 10 pass and 2
 fail by design (one `TODO(reggraeton)` stub, one undefined step).
 
 | Path | Purpose |

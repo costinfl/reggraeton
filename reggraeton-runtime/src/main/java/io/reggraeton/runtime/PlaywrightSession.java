@@ -59,6 +59,7 @@ public final class PlaywrightSession {
         BrowserContext context = engine.browser().newContext(new Browser.NewContextOptions()
                 .setBaseURL(RunConfig.baseUrl())
                 .setViewportSize(viewport[0], viewport[1]));
+        Dialogs.attach(context);
         context.setDefaultTimeout(RunConfig.timeoutMs());
         context.setDefaultNavigationTimeout(RunConfig.navigationTimeoutMs());
         boolean tracing = !"off".equals(RunConfig.trace());

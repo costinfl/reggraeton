@@ -29,7 +29,7 @@ class AssessCommandTest {
         assertThat(out.resolve("callgraph.json")).exists();
 
         Inventory inventory = Json.read(out.resolve("inventory.json"), Inventory.class);
-        assertThat(inventory.testCases()).hasSize(10);
+        assertThat(inventory.testCases()).hasSize(12);
 
         List<String> csv = Files.readAllLines(out.resolve("traceability.csv"));
         assertThat(csv.get(0)).isEqualTo(String.join(",", Traceability.COLUMNS));

@@ -58,6 +58,14 @@ public class CartSteps implements En {
             cartPage.checkoutWithNote(note);
         });
 
+        When("I empty the cart and confirm", () -> {
+            cartPage.emptyCart();
+        });
+
+        When("I empty the cart but cancel", () -> {
+            assertEquals("Empty the cart?", cartPage.cancelEmptyCart());
+        });
+
         Then("I see the order confirmation", () -> {
             assertTrue(cartPage.confirmationShown());
         });

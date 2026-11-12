@@ -2,7 +2,7 @@
 # End-to-end check of reggraeton: builds it, converts samples/legacy-shop in both modes and runs
 # the generated Playwright tests against the demo shop (samples/demo-app).
 #
-# Expected outcome per mode: 10 tests, 8 pass, 2 fail by design:
+# Expected outcome per mode: 12 tests, 10 pass, 2 fail by design:
 #   - "Browser console stays clean on the search page": TODO(reggraeton) stub (Selenium browser logs)
 #   - "Search suggestions": undefined step
 #
@@ -49,13 +49,13 @@ for mode in bdd native; do
   tests=$(cat "$project"/target/surefire-reports/TEST-*.xml | grep -o '<testcase ' | wc -l | tr -d ' ')
   failing=$(cat "$project"/target/surefire-reports/TEST-*.xml | grep -Eo '<(failure|error)[ >]' | wc -l | tr -d ' ')
   echo "   $tests tests, $failing failing"
-  if [ "$tests" != "10" ] || [ "$failing" != "2" ]; then
-    echo "   UNEXPECTED: wanted 10 tests with 2 failing by design. Log: $WORK/$mode.log"
+  if [ "$tests" != "12" ] || [ "$failing" != "2" ]; then
+    echo "   UNEXPECTED: wanted 12 tests with 2 failing by design. Log: $WORK/$mode.log"
     status=1
   fi
 done
 
 if [ $status -eq 0 ]; then
-  echo "== OK: both modes ran 10 tests, 8 passed, 2 failed by design (work dir: $WORK)"
+  echo "== OK: both modes ran 12 tests, 10 passed, 2 failed by design (work dir: $WORK)"
 fi
 exit $status

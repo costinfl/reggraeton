@@ -1,0 +1,16 @@
+# Copy to the root of the repository you scan as reggraeton.properties (or pass --config <file>).
+# Rules for calls into libraries outside that repository. Entries are prefixes of
+# package.Class.method, separated by commas or whitespace.
+#
+# Without rules, a call is kept unchanged when no Selenium object is passed to or returned
+# from it (logging, test data, string helpers ...), and left for manual conversion otherwise.
+
+# Keep these calls unchanged even if reggraeton thinks Selenium objects are involved.
+external.keep =
+
+# Remove these calls from the generated code (only when the call is a statement of its own),
+# e.g. screenshot/evidence helpers that the Playwright session replaces.
+external.drop =
+
+# Always leave these for manual conversion.
+external.manual =

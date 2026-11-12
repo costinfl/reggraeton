@@ -193,6 +193,11 @@ public final class Waits {
 
     // Page conditions ---------------------------------------------------------------------------
 
+    /** {@code alertIsPresent}: a dialog was opened (and answered, see {@link Dialogs}). */
+    public Alert alert() {
+        return Dialogs.waitFor(page, timeout());
+    }
+
     public boolean titleIs(String title) {
         assertThat(page).hasTitle(title, new PageAssertions.HasTitleOptions().setTimeout(timeout()));
         return true;

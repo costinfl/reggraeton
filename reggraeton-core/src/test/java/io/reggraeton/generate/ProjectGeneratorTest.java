@@ -38,7 +38,7 @@ class ProjectGeneratorTest {
         ProjectGenerator.Result result = generate(out, mode);
 
         assertThat(result.complete()).isTrue();
-        assertThat(result.generatedTests()).isEqualTo(scan.inventory().testCases().size()).isEqualTo(10);
+        assertThat(result.generatedTests()).isEqualTo(scan.inventory().testCases().size()).isEqualTo(12);
         assertThat(result.blockedTests()).isEqualTo(1);
         assertThat(result.todos()).hasSize(3);
         assertThat(result.files()).contains("pom.xml", "Jenkinsfile", "README.md", "traceability.csv",
@@ -87,11 +87,30 @@ class ProjectGeneratorTest {
     }
 
     @Test
+    void carriesOriginalDependenciesExceptReplacedOnes() {
+        io.reggraeton.model.ProjectLayout layout = new io.reggraeton.model.ProjectLayout("/r", "maven", List.of(), List.of(),
+                List.of(), List.of(), List.of(), "none", new java.util.TreeMap<>(java.util.Map.of(
+                "org.seleniumhq.selenium:selenium-java", "4.21.0",
+                "io.cucumber:cucumber-java", "7.18.0",
+                "org.apache.commons:commons-lang3", "3.14.0",
+                "com.acme:evidence", "?")));
+
+        ProjectFiles.Carried carried = ProjectFiles.carriedDependencies(layout);
+
+        assertThat(carried.withVersion()).containsOnlyKeys("org.apache.commons:commons-lang3");
+        assertThat(carried.withoutVersion()).containsExactly("com.acme:evidence");
+        String pom = ProjectFiles.pom(new ConvertOptions(Path.of("x"), ConvertOptions.Mode.NATIVE, null, null, null),
+                layout, false, carried);
+        assertThat(pom).contains("<artifactId>commons-lang3</artifactId>").contains("com.acme:evidence")
+                .doesNotContain("selenium-java");
+    }
+
+    @Test
     void conversionReportListsManualWork(@TempDir Path dir) throws Exception {
         generate(dir, ConvertOptions.Mode.NATIVE);
 
         String report = Files.readString(dir.resolve("conversion-report.md"));
-        assertThat(report).contains("| Generated tests | 10 |").contains("WebDriver.Options.logs")
+        assertThat(report).contains("| Generated tests | 12 |").contains("WebDriver.Options.logs")
                 .contains("src/test/java/com/example/shop/steps/SearchSteps.java:48").contains("blocked");
     }
 }

@@ -54,6 +54,10 @@ public final class ConvertCommand implements Callable<Integer> {
     @Option(names = "--force", description = "Write into a non-empty output directory, overwriting generated files.")
     boolean force;
 
+    @Option(names = "--config", paramLabel = "<file>",
+            description = "reggraeton.properties with rules for external library calls (default: <repo>/reggraeton.properties, if present).")
+    Path config;
+
     @picocli.CommandLine.Spec
     picocli.CommandLine.Model.CommandSpec spec;
 
@@ -87,7 +91,7 @@ public final class ConvertCommand implements Callable<Integer> {
         }
 
         console.printf("Scanning %s ...%n", absoluteRepo);
-        RepositoryScanner.Scan scan = new RepositoryScanner(Classpath.parse(classpath)).scanWithSources(absoluteRepo);
+        RepositoryScanner.Scan scan = new RepositoryScanner(Classpath.parse(classpath), config).scanWithSources(absoluteRepo);
         ConvertOptions options = new ConvertOptions(absoluteOut, parsedMode, basePackage, groupId, artifactId);
         ProjectGenerator.Result result = new ProjectGenerator(scan, options).generate();
 

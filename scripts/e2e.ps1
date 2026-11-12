@@ -88,8 +88,8 @@ try {
             $failing += ([regex]::Matches($text, '<(failure|error)[ >]')).Count
         }
         Write-Host "   $tests tests, $failing failing"
-        if ($tests -ne 10 -or $failing -ne 2) {
-            Write-Host "   UNEXPECTED: wanted 10 tests with 2 failing by design. Log: $work\$mode.log"
+        if ($tests -ne 12 -or $failing -ne 2) {
+            Write-Host "   UNEXPECTED: wanted 12 tests with 2 failing by design. Log: $work\$mode.log"
             $status = 1
         }
     }
@@ -98,6 +98,6 @@ try {
 }
 
 if ($status -eq 0) {
-    Write-Host "== OK: both modes ran 10 tests, 8 passed, 2 failed by design (work dir: $work)"
+    Write-Host "== OK: both modes ran 12 tests, 10 passed, 2 failed by design (work dir: $work)"
 }
 exit $status

@@ -115,11 +115,11 @@ public final class SeleniumApiCatalog {
         manual("WebDriver.TargetLocator.parentFrame", "frames: use the parent FrameLocator");
         manual("WebDriver.TargetLocator.window", "windows: use the Page object of the popup");
         manual("WebDriver.TargetLocator.newWindow", "windows: use context.newPage()");
-        manual("WebDriver.TargetLocator.alert", "dialogs: register page.onceDialog(...) before the triggering action");
-        manual("Alert.accept", "dialogs: register page.onceDialog(Dialog::accept) before the triggering action");
-        manual("Alert.dismiss", "dialogs: register page.onceDialog(Dialog::dismiss) before the triggering action");
-        manual("Alert.getText", "dialogs: read dialog.message() in page.onceDialog(...)");
-        manual("Alert.sendKeys", "dialogs: dialog.accept(text) in page.onceDialog(...)");
+        auto("WebDriver.TargetLocator.alert", "Dialogs.alert(page): dialogs are answered when they open and recorded");
+        auto("Alert.accept", "checks the recorded dialog was accepted (the default answer)");
+        auto("Alert.getText", "message of the recorded dialog");
+        auto("Alert.dismiss", "Dialogs.expectDismiss() is inserted before the action that opens the dialog");
+        auto("Alert.sendKeys", "Dialogs.expectPrompt(text) is inserted before the action that opens the dialog");
 
         // JavaScript, screenshots
         auto("JavascriptExecutor.executeScript", "page.evaluate(script)");
@@ -177,7 +177,7 @@ public final class SeleniumApiCatalog {
                 "visibilityOfAllElementsLocatedBy", "presenceOfAllElementsLocatedBy")) {
             auto("ExpectedConditions." + condition, "locator.waitFor / assertThat(...)");
         }
-        manual("ExpectedConditions.alertIsPresent", "dialogs: register page.onceDialog(...)");
+        auto("ExpectedConditions.alertIsPresent", "wait.alert()");
         manual("ExpectedConditions.frameToBeAvailableAndSwitchToIt", "frames: use page.frameLocator(selector)");
         manual("ExpectedConditions.stalenessOf", "rewrite with locator.waitFor(DETACHED)");
         manual("ExpectedConditions.numberOfWindowsToBe", "windows: use context.pages()");
@@ -219,6 +219,15 @@ public final class SeleniumApiCatalog {
         Support support = ENTRIES.get(normalise(api));
         if (support == null) {
             return Support.manual("no translation rule for this Selenium API");
+        }
+        if (call != null && support.auto() && (api.equals("Alert.dismiss") || api.equals("Alert.sendKeys"))) {
+            boolean early = !api.equals("Alert.sendKeys")
+                    || (call.getArguments().size() == 1 && DialogTriggers.evaluableEarly(call.getArgument(0)));
+            if (DialogTriggers.triggerFor(call).isEmpty() || !early) {
+                return Support.manual("the action that opens this dialog is not in the same method: call "
+                        + (api.equals("Alert.dismiss") ? "Dialogs.expectDismiss()" : "Dialogs.expectPrompt(text)")
+                        + " before that action (Playwright answers dialogs while they are open)");
+            }
         }
         if (call != null && support.auto()) {
             if (api.endsWith("JavascriptExecutor.executeScript") && call.getArguments().size() > 1) {

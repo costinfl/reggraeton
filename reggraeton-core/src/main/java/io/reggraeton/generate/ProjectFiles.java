@@ -18,7 +18,43 @@ final class ProjectFiles {
     private ProjectFiles() {
     }
 
+    /** Groups never copied from the original project: replaced by Playwright, Cucumber 8 and JUnit 6. */
+    private static final List<String> REPLACED_GROUPS = List.of("org.seleniumhq", "io.github.bonigarcia", "io.cucumber",
+            "info.cukes", "org.junit", "junit", "org.testng", "io.appium", "com.codeborne", "net.serenity-bdd",
+            "org.picocontainer", "com.microsoft.playwright", "org.assertj", "org.hamcrest", "com.google.truth");
+
+    /**
+     * Dependencies of the original project to carry over because kept external calls may need them:
+     * {@code groupId:artifactId} to version, and the ones whose version is unknown.
+     */
+    record Carried(Map<String, String> withVersion, List<String> withoutVersion) {
+    }
+
+    static Carried carriedDependencies(ProjectLayout legacy) {
+        Map<String, String> with = new java.util.TreeMap<>();
+        List<String> without = new ArrayList<>();
+        for (Map.Entry<String, String> lib : legacy.libraries().entrySet()) {
+            String key = lib.getKey();
+            String group = key.substring(0, key.indexOf(':'));
+            if (REPLACED_GROUPS.stream().anyMatch(g -> group.equals(g) || group.startsWith(g + "."))) {
+                continue;
+            }
+            String version = lib.getValue();
+            if (version == null || version.equals("?") || version.contains("${")) {
+                without.add(key);
+            } else {
+                with.put(key, version);
+            }
+        }
+        return new Carried(with, without);
+    }
+
     static String pom(ConvertOptions options, ProjectLayout legacy, boolean lambdaGlue) {
+        return pom(options, legacy, lambdaGlue, null);
+    }
+
+    /** @param carried original dependencies to keep (null: none) */
+    static String pom(ConvertOptions options, ProjectLayout legacy, boolean lambdaGlue, Carried carried) {
         boolean bdd = options.mode() == ConvertOptions.Mode.BDD;
         List<String> deps = new ArrayList<>();
         deps.add(dep("com.microsoft.playwright", "playwright", "${playwright.version}"));
@@ -54,6 +90,18 @@ final class ProjectFiles {
                     || key.equals("junit:junit") || key.equals("com.google.truth:truth"))) {
                 String[] ga = key.split(":");
                 deps.add(dep(ga[0], ga[1], version));
+            }
+        }
+
+        if (carried != null && (!carried.withVersion().isEmpty() || !carried.withoutVersion().isEmpty())) {
+            deps.add("    <!-- dependencies of the original project, kept for the external library calls left unchanged -->");
+            carried.withVersion().forEach((key, version) -> {
+                String[] ga = key.split(":");
+                deps.add(dep(ga[0], ga[1], version));
+            });
+            if (!carried.withoutVersion().isEmpty()) {
+                deps.add("    <!-- version unknown (managed by a parent POM or BOM); add them if the build needs them:\n         "
+                        + String.join("\n         ", carried.withoutVersion()) + " -->");
             }
         }
 
@@ -223,7 +271,8 @@ final class ProjectFiles {
                 Every setting can also come from an environment variable: `BASE_URL`, `HEADLESS`,
                 `BROWSER_CHANNEL`, `BROWSER_EXECUTABLE`, `SLOW_MO`, `PW_TIMEOUT` (ms, default 15000),
                 `PW_NAVIGATION_TIMEOUT`, `VIEWPORT` (e.g. `1920x1080`), `PW_TRACE` (`on-failure`, `on`, `off`),
-                `ARTIFACTS_DIR`, `CUCUMBER_FILTER_TAGS`.
+                `ARTIFACTS_DIR`, `CUCUMBER_FILTER_TAGS`, `DIALOGS` (`accept` or `dismiss`: default answer to
+                JavaScript dialogs, which are answered as soon as they open).
 
                 ## Results
 

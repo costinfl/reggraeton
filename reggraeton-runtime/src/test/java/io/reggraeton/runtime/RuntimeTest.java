@@ -186,6 +186,47 @@ class RuntimeTest {
 
     @Test
     @EnabledIfSystemProperty(named = "reggraeton.browserTests", matches = "true")
+    void dialogsAreAnsweredWhenTheyOpenAndCheckedAfterwards() {
+        Page page = PlaywrightSession.start("dialogs").page();
+        page.setContent("<button id='a' onclick=\"alert('Saved')\">a</button>"
+                + "<button id='c' onclick=\"document.title = confirm('Delete?') ? 'yes' : 'no'\">c</button>"
+                + "<button id='p' onclick=\"document.title = 'got:' + prompt('Name?')\">p</button>");
+
+        // Selenium style: click, then switchTo().alert()
+        page.locator("#a").click();
+        Alert alert = Dialogs.alert(page);
+        assertThat(alert.getText()).isEqualTo("Saved");
+        alert.accept();
+        assertThatThrownBy(() -> Dialogs.alert(page)).hasMessageContaining("No dialog was opened");
+
+        // confirm accepted by default
+        page.locator("#c").click();
+        assertThat(page.title()).isEqualTo("yes");
+        Dialogs.alert(page).accept();
+
+        // dismiss registered before the click
+        Dialogs.expectDismiss();
+        page.locator("#c").click();
+        assertThat(page.title()).isEqualTo("no");
+        Dialogs.alert(page).dismiss();
+
+        // dismiss() without registering first explains what to do
+        page.locator("#c").click();
+        assertThatThrownBy(() -> Dialogs.alert(page).dismiss())
+                .hasMessageContaining("Dialogs.expectDismiss()").hasMessageContaining("Delete?");
+        Dialogs.alert(page).accept();
+
+        // prompt
+        Dialogs.expectPrompt("Ada");
+        page.locator("#p").click();
+        assertThat(page.title()).isEqualTo("got:Ada");
+        Alert prompt = new Waits(page).alert();
+        prompt.sendKeys("Ada");
+        prompt.accept();
+    }
+
+    @Test
+    @EnabledIfSystemProperty(named = "reggraeton.browserTests", matches = "true")
     void sendKeysTypesTextAndPressesKeys() {
         Page page = PlaywrightSession.start("send-keys").page();
         page.setContent("<input id='q' value='ab'><div id='log'></div>"

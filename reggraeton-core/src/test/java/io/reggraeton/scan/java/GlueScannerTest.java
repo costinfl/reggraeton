@@ -22,8 +22,8 @@ class GlueScannerTest {
     void findsAnnotationLambdaAndRegexStepsInLegacyShop() {
         GlueScanner.Glue glue = scan(Samples.legacyShop());
 
-        assertThat(glue.stepDefinitions()).hasSize(19);
-        assertThat(glue.stepDefinitions()).filteredOn(s -> s.style().equals(StepDefinition.LAMBDA)).hasSize(8);
+        assertThat(glue.stepDefinitions()).hasSize(21);
+        assertThat(glue.stepDefinitions()).filteredOn(s -> s.style().equals(StepDefinition.LAMBDA)).hasSize(10);
         assertThat(glue.stepDefinitions()).filteredOn(s -> s.expressionType().equals(StepDefinition.REGULAR_EXPRESSION))
                 .extracting(StepDefinition::expression)
                 .containsExactlyInAnyOrder("^I search for \"([^\"]*)\"$", "^I sort the results by \"(.*)\"$",
