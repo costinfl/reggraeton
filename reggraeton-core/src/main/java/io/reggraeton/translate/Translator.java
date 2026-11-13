@@ -44,6 +44,7 @@ public final class Translator {
         index.types().values().forEach(t -> t.getMethods().forEach(m -> methodNames.add(m.getNameAsString())));
 
         SupportNames support = new SupportNames(supportPackage);
+        io.reggraeton.scan.java.DriverWrappers wrappers = io.reggraeton.scan.java.DriverWrappers.find(index);
         List<TranslatedSource> sources = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
         for (JavaSourceIndex.Source source : index.sources()) {
@@ -54,7 +55,7 @@ public final class Translator {
                 skipped.add(source.path());
                 continue;
             }
-            sources.add(new SourceTranslator(source.unit(), source.path(), index, support, methodNames).translate());
+            sources.add(new SourceTranslator(source.unit(), source.path(), index, support, methodNames, wrappers).translate());
         }
         return new Result(sources, skipped);
     }

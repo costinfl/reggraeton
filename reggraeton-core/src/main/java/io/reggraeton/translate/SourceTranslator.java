@@ -33,10 +33,13 @@ import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.type.UnionType;
 import io.reggraeton.model.CallGraph.ApiUsage;
 import io.reggraeton.scan.java.ApiClassifier;
 import io.reggraeton.scan.java.DialogTriggers;
+import io.reggraeton.scan.java.DriverWrappers;
 import io.reggraeton.scan.java.Expressions;
 import io.reggraeton.scan.java.JavaSourceIndex;
 import io.reggraeton.scan.java.JavaTypes;
@@ -91,7 +94,13 @@ final class SourceTranslator {
             "Select.getOptions", "Select.getFirstSelectedOption", "Select.getAllSelectedOptions", "Select.deselectAll",
             "Select.isMultiple", "Select.getWrappedElement",
             "WebDriver.TargetLocator.alert", "Alert.accept", "Alert.getText", "Alert.dismiss", "Alert.sendKeys",
-            "ExpectedConditions.alertIsPresent",
+            "ExpectedConditions.alertIsPresent", "JavascriptExecutor.executeAsyncScript",
+            "WebDriver.Options.getCookies", "WebDriver.Options.getCookieNamed", "WebDriver.Options.addCookie",
+            "WebDriver.Options.deleteCookieNamed", "WebDriver.Options.deleteCookie", "Cookie.<init>", "Cookie.getName",
+            "Cookie.getValue", "Cookie.getDomain", "Cookie.getPath", "Cookie.getExpiry", "Cookie.isSecure",
+            "Cookie.isHttpOnly", "Cookie.getSameSite", "Select.deselectByVisibleText", "Select.deselectByValue",
+            "Select.deselectByIndex", "Keys.chord", "Augmenter.<init>", "Augmenter.augment", "ExpectedCondition.<init>",
+            "ExpectedCondition.apply",
             "Actions.<init>", "Actions.moveToElement", "Actions.click", "Actions.doubleClick", "Actions.contextClick",
             "Actions.dragAndDrop", "Actions.sendKeys", "Actions.scrollToElement", "Actions.perform", "Actions.build",
             "Action.perform",
@@ -151,6 +160,7 @@ final class SourceTranslator {
         TYPE_MAP.put("org.openqa.selenium.support.ui.Wait", "Waits");
         TYPE_MAP.put("org.openqa.selenium.Keys", "Keys");
         TYPE_MAP.put("org.openqa.selenium.Alert", "Alert");
+        TYPE_MAP.put("org.openqa.selenium.Cookie", "Cookie");
         TYPE_MAP.put("org.openqa.selenium.TimeoutException", "TimeoutError");
         for (String e : List.of("NoSuchElementException", "StaleElementReferenceException", "WebDriverException",
                 "ElementNotInteractableException", "ElementClickInterceptedException", "InvalidElementStateException",
@@ -179,9 +189,19 @@ final class SourceTranslator {
     private final Map<Node, Statement> dialogTriggers = new IdentityHashMap<>();
     private final Map<String, Integer> changes = new TreeMap<>();
     private final List<TranslatedSource.Todo> todos = new ArrayList<>();
+    private final DriverWrappers wrappers;
+    /** Calls whose receiver (or implicit {@code this}) is a driver wrapper and must go through {@code page()}. */
+    private final Set<MethodCallExpr> adaptScopes = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** Wrapper-typed expressions used where a Selenium driver is expected: become {@code expr.page()}. */
+    private final Set<Expression> adaptValues = Collections.newSetFromMap(new IdentityHashMap<>());
 
+    /**
+     * @param wrappers driver wrapper classes of the whole repository, found once before any file is
+     *                 translated (translation removes the Selenium interfaces they are recognised by)
+     */
     SourceTranslator(CompilationUnit unit, String path, JavaSourceIndex index, SupportNames support,
-                     Set<String> projectMethodNames) {
+                     Set<String> projectMethodNames, DriverWrappers wrappers) {
+        this.wrappers = wrappers;
         this.unit = unit;
         this.path = path;
         this.index = index;
@@ -195,11 +215,16 @@ final class SourceTranslator {
         unit.walk(Node.TreeTraversal.POSTORDER, postOrder::add);
 
         // ---- pass 1: analyse the untouched tree ---------------------------------------------
+        List<MethodDeclaration> removedWrapperMethods = redirectedWrapperMethods();
+        postOrder.removeIf(n -> removedWrapperMethods.stream().anyMatch(m -> m == n || m.isAncestorOf(n)));
         for (Node node : postOrder) {
             if (node instanceof MethodCallExpr call) {
                 classify(call);
             } else if (node instanceof ObjectCreationExpr creation) {
                 classify(creation);
+            }
+            if (!wrappers.isEmpty()) {
+                collectWrapperValues(node);
             }
         }
         for (Node node : postOrder) {
@@ -224,6 +249,8 @@ final class SourceTranslator {
         }
 
         // ---- pass 2: apply ----------------------------------------------------------------
+        removedWrapperMethods.forEach(Node::remove);
+        adaptWrapperUses();
         insertDialogExpectations();
         applyManualStubs();
         convertFindByFields(fieldPages);
@@ -233,7 +260,9 @@ final class SourceTranslator {
                 apply(node, plan);
             }
         }
+        convertWrapperClasses();
         mapTypes();
+        mapExpectedConditionTypes();
         fixCatchClauses();
         fixImports();
 
@@ -272,13 +301,28 @@ final class SourceTranslator {
             }
             return;
         }
-        if (index.isProjectType(type)) {
+        Optional<DriverWrappers.Wrapper> wrapper = wrappers.get(type);
+        if (wrapper.isPresent() && wrapper.get().redirects(name, call.getArguments().size())) {
+            // a wrapper method returning Selenium-only types: call the Selenium API on wrapper.page() instead
+            Optional<String> iface = DriverWrappers.seleniumInterfaceOf(name, call.getArguments().size());
+            if (iface.isPresent()) {
+                type = iface.get();
+                adaptScopes.add(call);
+            } else {
+                infos.put(call, new CallInfo(ApiUsage.SELENIUM, JavaSourceIndex.withoutPackage(type) + "." + name, false,
+                        "driver wrapper method returning a Selenium-only type; convert the call by hand"));
+                return;
+            }
+        } else if (index.isProjectType(type)) {
             return;
         }
         ApiUsage usage = ApiClassifier.classify(type, name, JavaTypes.code(call), JavaSourceIndex.lineOf(call), call,
                 index.policy());
         if (usage == null) {
             return;
+        }
+        if (!adaptScopes.contains(call) && isWrapperTyped(call.getScope().map(SourceTranslator::stripCasts).orElse(null), call)) {
+            adaptScopes.add(call);
         }
         infos.put(call, new CallInfo(usage.category(), usage.api(), ApiUsage.AUTO.equals(usage.support()), usage.note()));
         if (usage.api().equals("WebElement.sendKeys") && call.getArguments().size() == 1
@@ -444,8 +488,11 @@ final class SourceTranslator {
             }
             case "FluentWait.until" -> {
                 MethodCallExpr call = (MethodCallExpr) node;
-                if (call.getArguments().size() == 1 && call.getArgument(0) instanceof MethodCallExpr condition
-                        && CONDITIONS.containsKey(condition.getNameAsString())) {
+                boolean knownCondition = call.getArguments().size() == 1 && call.getArgument(0) instanceof MethodCallExpr condition
+                        && CONDITIONS.containsKey(condition.getNameAsString());
+                boolean customCondition = call.getArguments().size() == 1 && !(call.getArgument(0) instanceof MethodCallExpr m
+                        && m.getScope().map(sc -> sc.toString().equals("ExpectedConditions")).orElse(false));
+                if (knownCondition || customCondition) {
                     plans.put(node, Plan.REWRITE);
                 } else {
                     manual(node, "custom wait condition: rewrite with locator.waitFor(...) or assertThat(...)");
@@ -467,6 +514,10 @@ final class SourceTranslator {
     }
 
     private void planDriverSetup(Node node, String api) {
+        if (node instanceof MethodCallExpr && (api.endsWith(".getBrowserName") || api.endsWith(".getBrowserVersion"))) {
+            plans.put(node, Plan.REWRITE);
+            return;
+        }
         if (api.startsWith("WebDriverManager.") && api.endsWith(".create")) {
             plans.put(node, Plan.DRIVER_PAGE);
             return;
@@ -485,7 +536,8 @@ final class SourceTranslator {
                 plans.put(node, Plan.REMOVE_STATEMENT);
                 return;
             }
-            manual(node, "browser options/capabilities used as a value; configure the browser with RunConfig instead");
+            // e.g. a field holding EdgeOptions: Playwright does not use it, the field becomes an unused Object
+            plans.put(node, Plan.REWRITE);
             return;
         }
         if (isWholeStatement(node)) {
@@ -900,7 +952,15 @@ final class SourceTranslator {
     }
 
     private Node rewrite(ObjectCreationExpr creation, String api) {
+        CallInfo info = infos.get(creation);
+        if (info != null && ApiUsage.DRIVER_SETUP.equals(info.category())) {
+            com.github.javaparser.ast.expr.NullLiteralExpr none = new com.github.javaparser.ast.expr.NullLiteralExpr();
+            none.setComment(new com.github.javaparser.ast.comments.BlockComment(" reggraeton: was " + JavaTypes.code(creation)
+                    .replace("*/", "* /") + "; browser options are configured with RunConfig "));
+            return none;
+        }
         return switch (api) {
+            case "Cookie.<init>", "ExpectedCondition.<init>", "Augmenter.<init>" -> creation;
             case "Select.<init>" -> creation.getArgument(0);
             case "WebDriverWait.<init>", "FluentWait.<init>" -> {
                 NodeList<Expression> args = new NodeList<>();
@@ -916,8 +976,39 @@ final class SourceTranslator {
 
     private Node rewrite(MethodCallExpr call, String api) {
         Expression s = call.getScope().map(SourceTranslator::stripCasts).orElse(null);
+        if (s instanceof ThisExpr && isInsideWrapper(call)) {
+            s = new MethodCallExpr("page");
+        }
         NodeList<Expression> args = call.getArguments();
+        if (api.endsWith(".getBrowserName")) {
+            return parse("RunConfig.browserName()");
+        }
+        if (api.endsWith(".getBrowserVersion")) {
+            return parse("PlaywrightSession.browserVersion()");
+        }
         switch (api) {
+            case "JavascriptExecutor.executeScript", "JavascriptExecutor.executeAsyncScript": {
+                MethodCallExpr script = new MethodCallExpr(new NameExpr("Scripts"),
+                        api.endsWith("Async" + "Script") ? "executeAsync" : "execute");
+                script.addArgument(s.clone());
+                args.forEach(a -> script.addArgument(a.clone()));
+                return script;
+            }
+            case "WebDriver.Options.getCookies":
+                return new MethodCallExpr(new NameExpr("Cookies"), "all", new NodeList<>(scopeOf(s).clone()));
+            case "WebDriver.Options.getCookieNamed":
+                return new MethodCallExpr(new NameExpr("Cookies"), "named", new NodeList<>(scopeOf(s).clone(), args.get(0).clone()));
+            case "WebDriver.Options.addCookie":
+                return new MethodCallExpr(new NameExpr("Cookies"), "add", new NodeList<>(scopeOf(s).clone(), args.get(0).clone()));
+            case "WebDriver.Options.deleteCookieNamed", "WebDriver.Options.deleteCookie":
+                return new MethodCallExpr(new NameExpr("Cookies"), "delete", new NodeList<>(scopeOf(s).clone(), args.get(0).clone()));
+            case "Select.deselectByVisibleText", "Select.deselectByValue", "Select.deselectByIndex":
+                return new MethodCallExpr(new NameExpr("Selects"), call.getNameAsString(), new NodeList<>(s.clone(), args.get(0).clone()));
+            case "Augmenter.augment":
+                return args.get(0) instanceof ThisExpr && isInsideWrapper(call) ? new MethodCallExpr("page") : args.get(0).clone();
+            case "Keys.chord", "ExpectedCondition.apply", "Cookie.getName", "Cookie.getValue", "Cookie.getDomain",
+                 "Cookie.getPath", "Cookie.getExpiry", "Cookie.isSecure", "Cookie.isHttpOnly", "Cookie.getSameSite":
+                return call;
             case "WebDriver.get":
                 return call(s, "navigate", args.get(0));
             case "WebDriver.getTitle":
@@ -982,8 +1073,6 @@ final class SourceTranslator {
                 return call(s, "isChecked");
             case "WebElement.getTagName":
                 return valueOf(call(s, "evaluate", Selectors.literal("e => e.tagName.toLowerCase()")));
-            case "JavascriptExecutor.executeScript":
-                return call(s, "evaluate", wrapScript(args.get(0)));
             case "TakesScreenshot.getScreenshotAs", "WebElement.getScreenshotAs": {
                 MethodCallExpr shot = call(s, "screenshot");
                 String kind = ((FieldAccessExpr) args.get(0)).getNameAsString();
@@ -1020,7 +1109,9 @@ final class SourceTranslator {
             case "Select.getWrappedElement":
                 return s.clone();
             case "FluentWait.until": {
-                MethodCallExpr condition = (MethodCallExpr) args.get(0);
+                if (!(args.get(0) instanceof MethodCallExpr condition && CONDITIONS.containsKey(condition.getNameAsString()))) {
+                    return call; // custom condition: Waits.until(Function<Page, T>)
+                }
                 MethodCallExpr wait = new MethodCallExpr(s, CONDITIONS.get(condition.getNameAsString()));
                 condition.getArguments().forEach(a -> wait.addArgument(a.clone()));
                 return wait;
@@ -1046,7 +1137,7 @@ final class SourceTranslator {
                     && KEYS.containsKey(f.getNameAsString())) {
                 return call(element, "press", Selectors.literal(KEYS.get(f.getNameAsString())));
             }
-            if (stringArguments.contains(call) && previousStatementClears(call, element)) {
+            if (stringArguments.contains(call) && !arg.toString().contains("Keys.") && previousStatementClears(call, element)) {
                 return call(element, "fill", arg);
             }
         }
@@ -1209,6 +1300,9 @@ final class SourceTranslator {
                 continue;
             }
             String fqn = qualified.get();
+            if (fqn.equals(EXPECTED_CONDITION)) {
+                continue; // see mapExpectedConditionTypes
+            }
             String replacement = TYPE_MAP.get(fqn);
             if (replacement == null && (fqn.startsWith("org.openqa.selenium.") || fqn.startsWith("io.github.bonigarcia."))) {
                 replacement = "Object";
@@ -1218,6 +1312,182 @@ final class SourceTranslator {
             }
             type.replace(new ClassOrInterfaceType(null, replacement));
             changes.merge("type " + JavaSourceIndex.withoutPackage(fqn) + " -> " + replacement, 1, Integer::sum);
+        }
+    }
+
+    private static final String EXPECTED_CONDITION = "org.openqa.selenium.support.ui.ExpectedCondition";
+
+    /** {@code ExpectedCondition<T>} becomes {@code java.util.function.Function<Page, T>}, which Waits.until takes. */
+    private void mapExpectedConditionTypes() {
+        for (ClassOrInterfaceType type : unit.findAll(ClassOrInterfaceType.class)) {
+            if (!attached(type) || !types.qualify(type).map(EXPECTED_CONDITION::equals).orElse(false)) {
+                continue;
+            }
+            NodeList<Type> args = new NodeList<>();
+            args.add(new ClassOrInterfaceType(null, "Page"));
+            if (type.getTypeArguments().isPresent() && type.getTypeArguments().get().size() == 1) {
+                args.add(type.getTypeArguments().get().get(0).clone());
+            } else {
+                args.add(new ClassOrInterfaceType(null, "Object"));
+            }
+            ClassOrInterfaceType function = new ClassOrInterfaceType(
+                    new ClassOrInterfaceType(new ClassOrInterfaceType(new ClassOrInterfaceType(null, "java"), "util"), "function"),
+                    "Function");
+            function.setTypeArguments(args);
+            type.replace(function);
+            changes.merge("type ExpectedCondition -> java.util.function.Function<Page, T>", 1, Integer::sum);
+        }
+    }
+
+    // =========================================================================================
+    // Driver wrappers (classes implementing WebDriver & co.)
+    // =========================================================================================
+
+    /** Wrapper methods returning / taking Selenium-only types: removed, their callers use page(). */
+    private List<MethodDeclaration> redirectedWrapperMethods() {
+        List<MethodDeclaration> result = new ArrayList<>();
+        for (TypeDeclaration<?> type : unit.findAll(TypeDeclaration.class)) {
+            wrappers.get(JavaSourceIndex.qualifiedName(type)).ifPresent(w -> {
+                for (MethodDeclaration m : type.getMethods()) {
+                    if (w.redirects(m.getNameAsString(), m.getParameters().size())) {
+                        result.add(m);
+                    }
+                }
+            });
+        }
+        return result;
+    }
+
+    private boolean isInsideWrapper(Node node) {
+        return node.findAncestor(TypeDeclaration.class)
+                .map(t -> wrappers.get(JavaSourceIndex.qualifiedName((TypeDeclaration<?>) t)).isPresent())
+                .orElse(false);
+    }
+
+    /** Static type of {@code e} (best effort), including {@code this}. */
+    private Optional<String> staticType(Expression e, Node context) {
+        if (e == null) {
+            return context.findAncestor(TypeDeclaration.class).map(t -> JavaSourceIndex.qualifiedName((TypeDeclaration<?>) t));
+        }
+        Expression inner = e;
+        while (inner instanceof EnclosedExpr enclosed) {
+            inner = enclosed.getInner();
+        }
+        if (inner instanceof ThisExpr) {
+            return inner.findAncestor(TypeDeclaration.class).map(t -> JavaSourceIndex.qualifiedName((TypeDeclaration<?>) t));
+        }
+        try {
+            com.github.javaparser.resolution.types.ResolvedType type = inner.calculateResolvedType();
+            return type.isReferenceType() ? Optional.of(type.asReferenceType().getQualifiedName()) : Optional.empty();
+        } catch (RuntimeException | StackOverflowError ex) {
+            return inner instanceof NameExpr name ? types.declaredType(name) : Optional.empty();
+        }
+    }
+
+    /** True when {@code scope} (null: implicit this) is a driver wrapper. */
+    private boolean isWrapperTyped(Expression scope, Node context) {
+        return staticType(scope, context).flatMap(wrappers::get).isPresent();
+    }
+
+    /** Records wrapper values passed / assigned / returned where a Selenium driver is expected. */
+    private void collectWrapperValues(Node node) {
+        try {
+            if (node instanceof MethodCallExpr || node instanceof ObjectCreationExpr || node instanceof ExplicitConstructorInvocationStmt) {
+                com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration callee =
+                        node instanceof MethodCallExpr m ? m.resolve()
+                                : node instanceof ObjectCreationExpr o ? o.resolve() : ((ExplicitConstructorInvocationStmt) node).resolve();
+                NodeList<Expression> args = ((com.github.javaparser.ast.nodeTypes.NodeWithArguments<?>) node).getArguments();
+                for (int i = 0; i < args.size() && i < callee.getNumberOfParams(); i++) {
+                    if (isSeleniumDriverType(callee.getParam(i).describeType()) && isWrapperTyped(args.get(i), node)) {
+                        adaptValues.add(args.get(i));
+                    }
+                }
+            }
+        } catch (RuntimeException | StackOverflowError e) {
+            // unresolvable call: nothing to adapt
+        }
+        if (node instanceof VariableDeclarator v && v.getInitializer().isPresent() && v.getType().isClassOrInterfaceType()
+                && types.qualify(v.getType().asClassOrInterfaceType()).map(SourceTranslator::isSeleniumDriverType).orElse(false)
+                && isWrapperTyped(v.getInitializer().get(), node)) {
+            adaptValues.add(v.getInitializer().get());
+        }
+        if (node instanceof ReturnStmt r && r.getExpression().isPresent()) {
+            Optional<MethodDeclaration> method = r.findAncestor(MethodDeclaration.class);
+            if (method.isPresent() && method.get().getType().isClassOrInterfaceType()
+                    && r.findAncestor(LambdaExpr.class).map(l -> !method.get().isAncestorOf(l)).orElse(true)
+                    && types.qualify(method.get().getType().asClassOrInterfaceType()).map(SourceTranslator::isSeleniumDriverType).orElse(false)
+                    && isWrapperTyped(r.getExpression().get(), node)) {
+                adaptValues.add(r.getExpression().get());
+            }
+        }
+    }
+
+    private static boolean isSeleniumDriverType(String described) {
+        String erased = described.replaceAll("<.*>", "");
+        return "Page".equals(TYPE_MAP.get(erased));
+    }
+
+    /** Applies the page() adaptations recorded in pass 1. */
+    private void adaptWrapperUses() {
+        for (MethodCallExpr call : adaptScopes) {
+            if (!attached(call)) {
+                continue;
+            }
+            if (call.getScope().isEmpty()) {
+                call.setScope(new MethodCallExpr("page"));
+            } else {
+                Expression inner = stripCasts(call.getScope().get());
+                while (inner instanceof EnclosedExpr enclosed) {
+                    inner = enclosed.getInner();
+                }
+                inner.replace(new MethodCallExpr(inner.clone(), "page"));
+            }
+            changes.merge("driver wrapper -> wrapper.page()", 1, Integer::sum);
+        }
+        for (Expression value : adaptValues) {
+            if (!attached(value)) {
+                continue;
+            }
+            Expression scope = value instanceof NameExpr || value instanceof ThisExpr || value instanceof MethodCallExpr
+                    || value instanceof FieldAccessExpr ? value.clone() : new EnclosedExpr(value.clone());
+            value.replace(new MethodCallExpr(scope, "page"));
+            changes.merge("driver wrapper -> wrapper.page()", 1, Integer::sum);
+        }
+    }
+
+    /** Wrapper classes stop implementing Selenium types, and get a page() method. */
+    private void convertWrapperClasses() {
+        for (TypeDeclaration<?> type : unit.findAll(TypeDeclaration.class)) {
+            Optional<DriverWrappers.Wrapper> wrapper = wrappers.get(JavaSourceIndex.qualifiedName(type));
+            if (wrapper.isEmpty() || !(type instanceof ClassOrInterfaceDeclaration cls)) {
+                continue;
+            }
+            cls.getImplementedTypes().removeIf(t -> types.qualify(t).map(q -> q.startsWith("org.openqa.selenium.")).orElse(false));
+            if (wrapper.get().extendsSeleniumClass()) {
+                cls.getExtendedTypes().removeIf(t -> types.qualify(t).map(q -> q.startsWith("org.openqa.selenium.")).orElse(false));
+                cls.findAll(ExplicitConstructorInvocationStmt.class).stream().filter(e -> !e.isThis()).forEach(e -> {
+                    todos.add(new TranslatedSource.Todo(path, JavaSourceIndex.lineOf(e), "super(...)",
+                            "the class extended a Selenium driver class; methods it inherited are no longer available",
+                            JavaTypes.code(e)));
+                    e.remove();
+                });
+            }
+            for (MethodDeclaration m : cls.getMethods()) {
+                m.getAnnotations().removeIf(a -> a.getNameAsString().equals("Override"));
+            }
+            if (cls.getMethodsBySignature("page").isEmpty()) {
+                String field = cls.getFields().stream()
+                        .filter(f -> !f.isStatic() && f.getElementType().isClassOrInterfaceType()
+                                && types.qualify(f.getElementType().asClassOrInterfaceType()).map(SourceTranslator::isSeleniumDriverType).orElse(false))
+                        .map(f -> f.getVariable(0).getNameAsString())
+                        .findFirst().orElse(null);
+                MethodDeclaration page = cls.addMethod("page", Modifier.Keyword.PUBLIC);
+                page.setType(new ClassOrInterfaceType(null, "Page"));
+                page.setBody(new BlockStmt(new NodeList<>(new ReturnStmt(field != null
+                        ? new FieldAccessExpr(new ThisExpr(), field) : parse("PlaywrightSession.current().page()")))));
+                page.setJavadocComment(" The Playwright page this driver wrapper works on (added by reggraeton). ");
+            }
+            changes.merge("driver wrapper class converted (Selenium interfaces removed, page() added)", 1, Integer::sum);
         }
     }
 

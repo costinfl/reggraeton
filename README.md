@@ -134,6 +134,19 @@ inserts `Dialogs.expectDismiss()` / `Dialogs.expectPrompt(text)` before the acti
 dialog when that action is in the same method; otherwise the call is reported as manual work, and
 at run time a mismatch fails with a message saying where to put the expectation.
 
+## Driver wrapper classes
+
+Classes that implement Selenium's driver interfaces (`class SmartDriver implements WebDriver,
+JavascriptExecutor`), usually to add logging or waiting around a real driver, are converted to
+plain classes with a `page()` method. Methods whose signatures translate (`findElement`, `get`,
+`executeScript` ...) stay, with their custom logic, and keep being called. Methods returning
+Selenium-only types (`switchTo()`, `manage()`, `navigate()`, `getScreenshotAs(..)`) are removed and
+their callers go through `page()` (`smart.manage().getCookieNamed(n)` becomes
+`Cookies.named(smart.page(), n)`). Where the wrapper was passed as a `WebDriver`
+(`new LoginPage(smart)`), `.page()` is added. The assessment lists such classes (`DRIVER_WRAPPER`);
+a class *extending* a Selenium driver class is reported (`DRIVER_SUBCLASS`) because the methods it
+inherited need rewriting by hand.
+
 ## No browser downloads
 
 - Generated tests launch only an installed Chromium-based browser: the `msedge` channel by

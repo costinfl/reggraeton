@@ -98,6 +98,23 @@ public final class RepositoryScanner {
         }
         JavaSourceIndex index = JavaSourceIndex.build(root, extraClasspath, policy);
         findings.addAll(index.problems());
+        for (io.reggraeton.scan.java.DriverWrappers.Wrapper w : io.reggraeton.scan.java.DriverWrappers.find(index).all().values()) {
+            var type = index.types().get(w.className());
+            String file = index.pathOf(type);
+            int line = io.reggraeton.scan.java.JavaSourceIndex.lineOf(type);
+            String supertypes = w.seleniumSupertypes().stream().map(io.reggraeton.scan.java.JavaSourceIndex::withoutPackage)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            if (w.extendsSeleniumClass()) {
+                findings.add(Finding.warning("DRIVER_SUBCLASS", w.className() + " extends " + supertypes
+                        + ": the Selenium superclass is removed, so methods it inherited from it must be rewritten by hand",
+                        file, line));
+            } else {
+                findings.add(Finding.info("DRIVER_WRAPPER", w.className() + " implements " + supertypes
+                        + ": converted to a plain class with a page() method; its methods "
+                        + (w.redirected().isEmpty() ? "" : "returning Selenium-only types (" + String.join(", ", w.redirected())
+                        + ") are removed and their callers use page(); the others ") + "keep their custom logic", file, line));
+            }
+        }
         GlueScanner.Glue glue = new GlueScanner(index).scan();
         findings.addAll(glue.findings());
 

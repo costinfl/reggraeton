@@ -144,6 +144,12 @@ public final class PlaywrightSession {
         return page;
     }
 
+    /** Version of the browser of the current thread, or an empty string before the first test started it. */
+    public static String browserVersion() {
+        Engine engine = ENGINE.get();
+        return engine == null ? "" : engine.browser().version();
+    }
+
     public BrowserContext context() {
         return context;
     }

@@ -88,6 +88,9 @@ public final class JavaTypes {
                     return qualify(name.getNameAsString());
                 }
             }
+            if (scope instanceof ObjectCreationExpr created) {
+                return createdType(created); // new Augmenter().augment(driver)
+            }
             if (scope instanceof MethodCallExpr inner) {
                 // fluent builders of libraries that are not on the classpath (WebDriverManager.chromedriver().setup())
                 Optional<String> owner = declaringType(inner);
@@ -107,6 +110,14 @@ public final class JavaTypes {
      */
     public Optional<String> declaredType(NameExpr name) {
         String id = name.getNameAsString();
+        // implicitly typed parameter of a lambda passed to wait.until(...): the driver
+        for (Node p = name.getParentNode().orElse(null); p != null; p = p.getParentNode().orElse(null)) {
+            if (p instanceof com.github.javaparser.ast.expr.LambdaExpr lambda
+                    && lambda.getParameters().stream().anyMatch(param -> param.getNameAsString().equals(id) && param.getType().isUnknownType())
+                    && lambda.getParentNode().orElse(null) instanceof MethodCallExpr call && call.getNameAsString().equals("until")) {
+                return Optional.of("org.openqa.selenium.WebDriver");
+            }
+        }
         for (Node p = name.getParentNode().orElse(null); p != null; p = p.getParentNode().orElse(null)) {
             if (p instanceof com.github.javaparser.ast.stmt.BlockStmt block) {
                 for (var stmt : block.getStatements()) {
