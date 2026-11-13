@@ -12,6 +12,7 @@ import io.reggraeton.model.TestCase;
 import io.reggraeton.model.TestCaseAssessment;
 import io.reggraeton.model.TestStep;
 import io.reggraeton.scan.java.CallGraphBuilder;
+import io.reggraeton.scan.java.ExternalPolicy;
 import io.reggraeton.scan.java.GlueScanner;
 import io.reggraeton.scan.java.JavaSourceIndex;
 import io.reggraeton.util.RepoFiles;
@@ -38,6 +39,7 @@ public final class RepositoryScanner {
             "BeforeAll", "Before", "BeforeStep", "AfterStep", "After", "AfterAll");
 
     private final List<Path> extraClasspath;
+    private final Path configFile;
 
     public RepositoryScanner() {
         this(List.of());
@@ -45,7 +47,15 @@ public final class RepositoryScanner {
 
     /** @param extraClasspath jars of the scanned project, used only to improve type resolution */
     public RepositoryScanner(List<Path> extraClasspath) {
+        this(extraClasspath, null);
+    }
+
+    /**
+     * @param configFile {@code reggraeton.properties} to use; null means the one in the repository root, if any
+     */
+    public RepositoryScanner(List<Path> extraClasspath, Path configFile) {
         this.extraClasspath = List.copyOf(extraClasspath);
+        this.configFile = configFile;
     }
 
     /** Inventory plus the parsed Java sources (needed by the translator). */
@@ -78,7 +88,15 @@ public final class RepositoryScanner {
         }
 
         // 2. glue code
-        JavaSourceIndex index = JavaSourceIndex.build(root, extraClasspath);
+        Path config = configFile != null ? configFile : root.resolve(ExternalPolicy.FILE_NAME);
+        if (configFile != null && !Files.isRegularFile(configFile)) {
+            throw new IllegalArgumentException("Configuration file not found: " + configFile);
+        }
+        ExternalPolicy policy = ExternalPolicy.load(config);
+        if (policy.source() != null) {
+            findings.add(Finding.info("CONFIGURATION", "External library rules read from " + policy.source(), null, 0));
+        }
+        JavaSourceIndex index = JavaSourceIndex.build(root, extraClasspath, policy);
         findings.addAll(index.problems());
         GlueScanner.Glue glue = new GlueScanner(index).scan();
         findings.addAll(glue.findings());

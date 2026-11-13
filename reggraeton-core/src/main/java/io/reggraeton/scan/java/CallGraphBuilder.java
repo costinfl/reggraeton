@@ -277,7 +277,7 @@ public final class CallGraphBuilder {
             int line = JavaSourceIndex.lineOf(creation);
             try {
                 ResolvedConstructorDeclaration resolved = creation.resolve();
-                target(resolved, resolved.declaringType().getQualifiedName(), "<init>", null, line);
+                target(resolved, resolved.declaringType().getQualifiedName(), "<init>", creation, line);
                 return;
             } catch (RuntimeException | StackOverflowError e) {
                 // heuristics below
@@ -288,7 +288,7 @@ public final class CallGraphBuilder {
                 edges.add(new Edge(from, constructorTarget(candidates.get(0), creation.getArguments().size()), line, false));
                 return;
             }
-            importedType(creation, simple).ifPresent(owner -> usage(owner, "<init>", null, line, code(creation)));
+            importedType(creation, simple).ifPresent(owner -> usage(owner, "<init>", creation, line, code(creation)));
         }
 
         void explicitConstructor(ExplicitConstructorInvocationStmt invocation) {
@@ -313,7 +313,7 @@ public final class CallGraphBuilder {
         }
 
         private void target(ResolvedMethodLikeDeclaration resolved, String declaringType, String member,
-                            MethodCallExpr call, int line) {
+                            Expression call, int line) {
             if (index.isProjectType(declaringType)) {
                 Optional<Node> ast = resolved.toAst();
                 String id = ast.filter(CallableDeclaration.class::isInstance)
@@ -327,12 +327,12 @@ public final class CallGraphBuilder {
             }
         }
 
-        private void usage(String declaringType, String member, MethodCallExpr call, int line) {
+        private void usage(String declaringType, String member, Expression call, int line) {
             usage(declaringType, member, call, line, call == null ? "" : code(call));
         }
 
-        private void usage(String declaringType, String member, MethodCallExpr call, int line, String code) {
-            ApiUsage usage = ApiClassifier.classify(declaringType, member, code, line, call);
+        private void usage(String declaringType, String member, Expression call, int line, String code) {
+            ApiUsage usage = ApiClassifier.classify(declaringType, member, code, line, call, index.policy());
             if (usage != null) {
                 usages.add(usage);
             }

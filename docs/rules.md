@@ -25,6 +25,10 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `Actions.perform` | dropped |
 | `Actions.scrollToElement` | locator.scrollIntoViewIfNeeded() |
 | `Actions.sendKeys` | locator.pressSequentially(text) / page.keyboard().type(text) |
+| `Alert.accept` | checks the recorded dialog was accepted (the default answer) |
+| `Alert.dismiss` | Dialogs.expectDismiss() is inserted before the action that opens the dialog |
+| `Alert.getText` | message of the recorded dialog |
+| `Alert.sendKeys` | Dialogs.expectPrompt(text) is inserted before the action that opens the dialog |
 | `By.className` | Playwright selector |
 | `By.cssSelector` | Playwright selector |
 | `By.id` | Playwright selector |
@@ -33,6 +37,7 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `By.partialLinkText` | Playwright selector |
 | `By.tagName` | Playwright selector |
 | `By.xpath` | Playwright selector |
+| `ExpectedConditions.alertIsPresent` | wait.alert() |
 | `ExpectedConditions.attributeToBe` | locator.waitFor / assertThat(...) |
 | `ExpectedConditions.elementToBeClickable` | locator.waitFor / assertThat(...) |
 | `ExpectedConditions.elementToBeSelected` | locator.waitFor / assertThat(...) |
@@ -63,6 +68,12 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `SearchContext.findElement` | locator.locator(selector) |
 | `SearchContext.findElements` | locator.locator(selector).all() |
 | `Select.<init>` | dropped; calls become locator.selectOption(...) |
+| `Select.deselectAll` | locator.selectOption(new String[0]) |
+| `Select.getAllSelectedOptions` | Elements.findAll(locator.locator("option:checked")) |
+| `Select.getFirstSelectedOption` | locator.locator("option:checked").first() |
+| `Select.getOptions` | Elements.findAll(locator.locator("option")) |
+| `Select.getWrappedElement` | the select locator itself |
+| `Select.isMultiple` | locator.getAttribute("multiple") != null |
 | `Select.selectByIndex` | locator.selectOption(new SelectOption().setIndex(i)) |
 | `Select.selectByValue` | locator.selectOption(value) |
 | `Select.selectByVisibleText` | locator.selectOption(new SelectOption().setLabel(text)) |
@@ -75,6 +86,7 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `WebDriver.Options.timeouts` | see WebDriver.Timeouts |
 | `WebDriver.Options.window` | see WebDriver.Window |
 | `WebDriver.TargetLocator.activeElement` | page.locator("*:focus") |
+| `WebDriver.TargetLocator.alert` | Dialogs.alert(page): dialogs are answered when they open and recorded |
 | `WebDriver.Timeouts.implicitlyWait` | dropped (Playwright auto-waits) |
 | `WebDriver.Timeouts.pageLoadTimeout` | page.setDefaultNavigationTimeout(ms) |
 | `WebDriver.Timeouts.scriptTimeout` | dropped |
@@ -122,12 +134,7 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `Actions.moveByOffset` | use page.mouse().move(x, y) |
 | `Actions.pause` | remove, or use page.waitForTimeout(ms) |
 | `Actions.release` | use page.mouse().up() |
-| `Alert.accept` | dialogs: register page.onceDialog(Dialog::accept) before the triggering action |
-| `Alert.dismiss` | dialogs: register page.onceDialog(Dialog::dismiss) before the triggering action |
-| `Alert.getText` | dialogs: read dialog.message() in page.onceDialog(...) |
-| `Alert.sendKeys` | dialogs: dialog.accept(text) in page.onceDialog(...) |
 | `By.ByChained.<init>` | chained locators: rewrite as locator(a).locator(b) |
-| `ExpectedConditions.alertIsPresent` | dialogs: register page.onceDialog(...) |
 | `ExpectedConditions.frameToBeAvailableAndSwitchToIt` | frames: use page.frameLocator(selector) |
 | `ExpectedConditions.numberOfWindowsToBe` | windows: use context.pages() |
 | `ExpectedConditions.stalenessOf` | rewrite with locator.waitFor(DETACHED) |
@@ -136,21 +143,15 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `LogEntries.getAll` | browser logs: subscribe to page.onConsoleMessage(...) instead |
 | `LogEntries.iterator` | browser logs: subscribe to page.onConsoleMessage(...) instead |
 | `Logs.get` | browser logs: subscribe to page.onConsoleMessage(...) instead |
-| `Select.deselectAll` | use locator.selectOption(new String[0]) |
 | `Select.deselectByIndex` | rewrite with locator.selectOption(...) |
 | `Select.deselectByValue` | rewrite with locator.selectOption(...) |
 | `Select.deselectByVisibleText` | rewrite with locator.selectOption(...) |
-| `Select.getAllSelectedOptions` | use locator.locator("option:checked").all() |
-| `Select.getFirstSelectedOption` | use locator.locator("option:checked") |
-| `Select.getOptions` | use locator.locator("option").all() |
-| `Select.isMultiple` | use locator.getAttribute("multiple") |
 | `WebDriver.Options.addCookie` | use page.context().addCookies(...) |
 | `WebDriver.Options.deleteCookie` | use page.context().clearCookies(...) |
 | `WebDriver.Options.deleteCookieNamed` | use page.context().clearCookies(new ClearCookiesOptions().setName(..)) |
 | `WebDriver.Options.getCookieNamed` | use page.context().cookies() |
 | `WebDriver.Options.getCookies` | use page.context().cookies() |
 | `WebDriver.Options.logs` | browser logs: subscribe to page.onConsoleMessage(...) instead |
-| `WebDriver.TargetLocator.alert` | dialogs: register page.onceDialog(...) before the triggering action |
 | `WebDriver.TargetLocator.defaultContent` | frames: go back to using page |
 | `WebDriver.TargetLocator.frame` | frames: use page.frameLocator(selector) for the following calls |
 | `WebDriver.TargetLocator.newWindow` | windows: use context.newPage() |

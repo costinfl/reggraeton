@@ -25,7 +25,11 @@ class TranslatorTest {
 
     /** Translates every file of a throw-away repository; returns path to translated source. */
     private static Map<String, TranslatedSource> translate(Path repo) {
-        JavaSourceIndex index = JavaSourceIndex.build(repo, List.of());
+        return translate(repo, io.reggraeton.scan.java.ExternalPolicy.defaults());
+    }
+
+    private static Map<String, TranslatedSource> translate(Path repo, io.reggraeton.scan.java.ExternalPolicy policy) {
+        JavaSourceIndex index = JavaSourceIndex.build(repo, List.of(), policy);
         Set<String> methods = new HashSet<>();
         index.types().values().forEach(t -> t.getMethods().forEach(m -> methods.add(m.getNameAsString())));
         Map<String, TranslatedSource> result = new LinkedHashMap<>();
@@ -151,8 +155,8 @@ class TranslatorTest {
                     private WebDriver driver;
                     public String accept() {
                         driver.switchTo().frame("payment");
-                        Alert alert = driver.switchTo().alert();
-                        String text = alert.getText();
+                        Object cookies = driver.manage().getCookies();
+                        String text = driver.getWindowHandle();
                         Evidence.attach(driver, "x");
                         try {
                             driver.findElement(By.id("ok")).click();
@@ -167,11 +171,11 @@ class TranslatorTest {
         TranslatedSource t = translate(dir).get("Page3");
 
         assertThat(t.todos()).extracting(TranslatedSource.Todo::api)
-                .contains("WebDriver.TargetLocator.frame", "WebDriver.TargetLocator.alert", "Alert.getText", "Evidence.attach");
+                .contains("WebDriver.TargetLocator.frame", "WebDriver.Options.getCookies", "WebDriver.getWindowHandle", "Evidence.attach");
         assertThat(t.source())
                 .contains("// TODO(reggraeton) WebDriver.TargetLocator.frame")
                 .contains("PendingConversion.fail(\"Page3.java:")
-                .contains("Object alert = PendingConversion.fail(")
+                .contains("Object cookies = PendingConversion.fail(")
                 .contains("String text = PendingConversion.fail(")
                 .contains("catch (PlaywrightException e)")
                 .doesNotContain("org.openqa.selenium");
@@ -207,6 +211,128 @@ class TranslatorTest {
                 .contains("// reggraeton: removed options.addArguments(\"--headless=new\");")
                 .doesNotContain("bonigarcia")
                 .doesNotContain("org.openqa.selenium");
+    }
+
+    @Test
+    void handlesDialogsTheWayPlaywrightNeeds(@TempDir Path dir) {
+        new TempRepo(dir).java("x", "Page5", imports() + """
+                public class Page5 {
+                    private WebDriver driver;
+                    private WebDriverWait wait;
+                    public String deleteAndConfirm() {
+                        driver.findElement(By.id("delete")).click();
+                        Alert alert = driver.switchTo().alert();
+                        String text = alert.getText();
+                        alert.accept();
+                        return text;
+                    }
+                    public void deleteButCancel() {
+                        driver.findElement(By.id("delete")).click();
+                        wait.until(ExpectedConditions.alertIsPresent());
+                        driver.switchTo().alert().dismiss();
+                    }
+                    public void rename() {
+                        driver.findElement(By.id("rename")).click();
+                        Alert prompt = wait.until(ExpectedConditions.alertIsPresent());
+                        prompt.sendKeys("new name");
+                        prompt.accept();
+                    }
+                    public void cancelWhateverIsOpen() {
+                        driver.switchTo().alert().dismiss();
+                    }
+                    public void decide(boolean ok) {
+                        driver.findElement(By.id("delete")).click();
+                        Alert alert = driver.switchTo().alert();
+                        if (ok) { alert.accept(); } else { alert.dismiss(); }
+                    }
+                }
+                """);
+
+        TranslatedSource t = translate(dir).get("Page5");
+
+        assertThat(t.source())
+                .contains("Alert alert = Dialogs.alert(driver);")
+                .contains("String text = alert.getText();")
+                .contains("alert.accept();")
+                .contains("wait.alert();")
+                .contains("Alert prompt = wait.alert();")
+                .contains("prompt.sendKeys(\"new name\");");
+        // dismiss / prompt answers are registered before the click that opens the dialog
+        String cancel = t.source().substring(t.source().indexOf("void deleteButCancel"));
+        assertThat(cancel.indexOf("Dialogs.expectDismiss();")).isGreaterThan(0)
+                .isLessThan(cancel.indexOf("driver.locator(\"#delete\").click();"));
+        String rename = t.source().substring(t.source().indexOf("void rename"));
+        assertThat(rename.indexOf("Dialogs.expectPrompt(\"new name\");")).isGreaterThan(0)
+                .isLessThan(rename.indexOf("driver.locator(\"#rename\").click();"));
+        // no triggering action in the same method: left for a human, with the explanation
+        // no triggering action in the same method, or a conditional dismiss: left for a human, with the explanation
+        assertThat(t.todos()).hasSize(2).allSatisfy(todo -> {
+            assertThat(todo.api()).isEqualTo("Alert.dismiss");
+            assertThat(todo.note()).contains("Dialogs.expectDismiss()");
+        });
+    }
+
+    @Test
+    void keepsDropsOrFlagsExternalCalls(@TempDir Path dir) {
+        new TempRepo(dir).java("x", "Page6", imports() + """
+                import com.acme.log.Log;
+                import com.acme.qa.Evidence;
+                import com.acme.qa.Metrics;
+                import com.acme.data.TestData;
+
+                public class Page6 {
+                    private WebDriver driver;
+                    public void save() {
+                        Log.info("saving");
+                        String user = TestData.user("admin");
+                        Metrics.count("save");
+                        Evidence.attach(driver, "save");
+                        driver.findElement(By.id("user")).sendKeys(user);
+                    }
+                }
+                """);
+        io.reggraeton.scan.java.ExternalPolicy policy = new io.reggraeton.scan.java.ExternalPolicy(
+                List.of(), List.of("com.acme.qa.Metrics"), List.of("com.acme.data"), "test");
+
+        TranslatedSource t = translate(dir, policy).get("Page6");
+
+        assertThat(t.source())
+                .contains("Log.info(\"saving\");")                           // kept: no Selenium involved
+                .contains("// reggraeton: removed Metrics.count(\"save\");") // dropped by configuration
+                .contains("import com.acme.log.Log;");
+        assertThat(t.todos()).extracting(TranslatedSource.Todo::api)
+                .containsExactlyInAnyOrder("TestData.user", "Evidence.attach");  // configured manual; receives the driver
+    }
+
+    @Test
+    void translatesSelectQueries(@TempDir Path dir) {
+        new TempRepo(dir).java("x", "Page4", imports() + """
+                public class Page4 {
+                    private WebDriver driver;
+                    public String read() {
+                        Select country = new Select(driver.findElement(By.id("country")));
+                        List<WebElement> options = country.getOptions();
+                        String first = new Select(driver.findElement(By.id("city"))).getFirstSelectedOption().getText();
+                        int selected = country.getAllSelectedOptions().size();
+                        if (country.isMultiple()) {
+                            country.deselectAll();
+                        }
+                        return options.get(0).getText() + first + selected + country.getWrappedElement().isEnabled();
+                    }
+                }
+                """);
+
+        TranslatedSource t = translate(dir).get("Page4");
+
+        assertThat(t.todos()).isEmpty();
+        assertThat(t.source())
+                .contains("Locator country = driver.locator(\"#country\");")
+                .contains("List<Locator> options = Elements.findAll(country.locator(\"option\"));")
+                .contains("String first = driver.locator(\"#city\").locator(\"option:checked\").first().innerText();")
+                .contains("int selected = Elements.findAll(country.locator(\"option:checked\")).size();")
+                .contains("if ((country.getAttribute(\"multiple\") != null)) {")
+                .contains("country.selectOption(new String[0]);")
+                .contains("country.isEnabled()");
     }
 
     @Test

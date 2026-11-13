@@ -48,6 +48,10 @@ public final class AssessCommand implements Callable<Integer> {
                     + "partial (any test not fully ready). Default: ${DEFAULT-VALUE}.")
     FailOn failOn;
 
+    @Option(names = "--config", paramLabel = "<file>",
+            description = "reggraeton.properties with rules for external library calls (default: <repo>/reggraeton.properties, if present).")
+    Path config;
+
     @picocli.CommandLine.Spec
     picocli.CommandLine.Model.CommandSpec spec;
 
@@ -56,7 +60,7 @@ public final class AssessCommand implements Callable<Integer> {
         PrintWriter console = spec.commandLine().getOut();
         List<Path> jars = Classpath.parse(classpath);
         console.printf("Scanning %s ...%n", repository.toAbsolutePath().normalize());
-        Inventory inventory = new RepositoryScanner(jars).scan(repository);
+        Inventory inventory = new RepositoryScanner(jars, config).scan(repository);
         List<Path> files = AssessmentWriter.write(inventory, out, basePackage);
 
         long ready = count(inventory, TestCaseAssessment.READY);

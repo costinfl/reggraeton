@@ -1,5 +1,6 @@
 package com.example.shop.pages;
 
+import org.openqa.selenium.Alert;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -31,6 +32,20 @@ public class CartPage extends BasePage {
     public void checkoutWithNote(String note) {
         type(notes, note);
         driver.findElement(By.id("checkout")).click();
+    }
+
+    public void emptyCart() {
+        driver.findElement(By.id("empty-cart")).click();
+        driver.switchTo().alert().accept();
+    }
+
+    /** Clicks "Empty cart", cancels the confirmation and returns its question. */
+    public String cancelEmptyCart() {
+        driver.findElement(By.id("empty-cart")).click();
+        Alert alert = driver.switchTo().alert();
+        String question = alert.getText();
+        alert.dismiss();
+        return question;
     }
 
     public boolean confirmationShown() {

@@ -35,6 +35,10 @@ public record CallGraph(List<Node> nodes, List<Edge> edges) {
         public static final String CUCUMBER = "cucumber";
         public static final String DRIVER_SETUP = "driver-setup";
         public static final String EXTERNAL = "external";
+        /** External call kept as is: no Selenium object flows in or out, or listed in external.keep. */
+        public static final String EXTERNAL_KEPT = "external-kept";
+        /** External call removed from the generated code (external.drop). */
+        public static final String EXTERNAL_DROPPED = "external-dropped";
         public static final String AUTO = "auto";
         public static final String MANUAL = "manual";
     }

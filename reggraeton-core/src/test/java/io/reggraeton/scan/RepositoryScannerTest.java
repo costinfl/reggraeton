@@ -24,9 +24,9 @@ class RepositoryScannerTest {
     void everyScenarioAndExamplesRowBecomesOneTestCase() {
         Inventory inventory = new RepositoryScanner().scan(Samples.legacyShop());
 
-        assertThat(inventory.features()).hasSize(3);
-        // login: 1 scenario + 3 outline rows, cart: 3, search: 3
-        assertThat(inventory.testCases()).hasSize(10);
+        assertThat(inventory.features()).hasSize(4);
+        // login: 1 scenario + 3 outline rows, cart: 3, search: 3, empty-cart: 2
+        assertThat(inventory.testCases()).hasSize(12);
         assertThat(inventory.testCases()).extracting(TestCase::id).doesNotHaveDuplicates();
     }
 
@@ -34,7 +34,7 @@ class RepositoryScannerTest {
     void assessesReadinessAndReportsFindings() {
         Inventory inventory = new RepositoryScanner().scan(Samples.legacyShop());
 
-        assertThat(inventory.stepDefinitions()).hasSize(19);
+        assertThat(inventory.stepDefinitions()).hasSize(21);
         assertThat(inventory.hooks()).extracting(h -> h.phase() + h.order())
                 .containsExactly("Before0", "Before10", "After10000");
         assertThat(inventory.assessments()).hasSize(inventory.testCases().size());
@@ -44,7 +44,7 @@ class RepositoryScannerTest {
         assertThat(byId.get("src/test/resources/features/login.feature:11").status()).isEqualTo(TestCaseAssessment.READY);
         assertThat(byId.get("src/test/resources/features/shop/search.feature:12").status()).isEqualTo(TestCaseAssessment.PARTIAL);
         assertThat(byId.get("src/test/resources/features/shop/search.feature:17").status()).isEqualTo(TestCaseAssessment.BLOCKED);
-        assertThat(inventory.assessments()).filteredOn(a -> a.status().equals(TestCaseAssessment.READY)).hasSize(8);
+        assertThat(inventory.assessments()).filteredOn(a -> a.status().equals(TestCaseAssessment.READY)).hasSize(10);
 
         // the @cart hook applies to cart scenarios only
         assertThat(byId.get("src/test/resources/features/shop/cart.feature:10").hookIds())
@@ -78,6 +78,30 @@ class RepositoryScannerTest {
         assertThat(inventory.stepDefinitions()).extracting(StepDefinition::className).containsExactly("a.steps.Inside");
         assertThat(inventory.testCases().get(0).steps().get(0).match().status()).isEqualTo(StepMatch.MATCHED);
         assertThat(inventory.findings()).extracting(Finding::code).contains("OUTSIDE_GLUE");
+    }
+
+    @Test
+    void readsExternalLibraryRulesFromReggraetonProperties(@TempDir Path dir) {
+        new io.reggraeton.TempRepo(dir)
+                .file("reggraeton.properties", "external.drop = com.acme.Metrics\n")
+                .file("src/test/resources/f.feature", "Feature: f\n  Scenario: s\n    Given a step\n")
+                .java("a.steps", "Steps", """
+                        import io.cucumber.java.en.Given;
+                        import com.acme.Metrics;
+                        import com.acme.Log;
+                        public class Steps {
+                            @Given("a step") public void x() { Metrics.count("x"); Log.info("x"); }
+                        }
+                        """);
+
+        Inventory inventory = new RepositoryScanner().scan(dir);
+
+        assertThat(inventory.findings()).extracting(Finding::code).contains("CONFIGURATION");
+        assertThat(inventory.callGraph().nodes()).flatExtracting(n -> n.apiUsages())
+                .extracting(u -> u.api() + "=" + u.category())
+                .containsExactlyInAnyOrder("Metrics.count=external-dropped", "Log.info=external-kept");
+        assertThat(inventory.assessments()).singleElement()
+                .satisfies(a -> assertThat(a.status()).isEqualTo(TestCaseAssessment.READY));
     }
 
     @Test

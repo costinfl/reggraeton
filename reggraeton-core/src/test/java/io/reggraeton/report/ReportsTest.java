@@ -23,12 +23,28 @@ class ReportsTest {
     @Test
     void totalsMatchTheInventory() {
         ReportData.Totals t = data.totals();
-        assertThat(t.testCases()).isEqualTo(10);
+        assertThat(t.testCases()).isEqualTo(12);
         assertThat(t.ready() + t.partial() + t.blocked()).isEqualTo(t.testCases());
         assertThat(t.outlines()).isEqualTo(1);
         assertThat(t.manualSites()).isEqualTo(4);
         assertThat(data.apis()).first().satisfies(api -> assertThat(api.support()).isEqualTo("manual"));
         assertThat(data.stepDefinitions()).filteredOn(s -> s.uses() == 0).hasSize(1);
+    }
+
+    @Test
+    void ranksManualWorkByTestsAffected() {
+        assertThat(data.impactByApi()).extracting(ReportData.ImpactByApi::api)
+                .containsExactlyInAnyOrder("Logs.get", "WebDriver.Options.logs", "LogEntries.getAll");
+        assertThat(data.impactByApi()).allSatisfy(row -> assertThat(row.testsAffected()).isEqualTo(1));
+        assertThat(data.impactBySite()).hasSize(3).allSatisfy(site -> {
+            assertThat(site.file()).endsWith("SearchSteps.java");
+            assertThat(site.testsAffected()).isEqualTo(1);
+        });
+
+        String html = HtmlReport.render(data);
+        assertThat(html).contains("id=\"impact\"").contains("Tests affected").contains("<details class=\"section\"")
+                .contains("data-status=\"partial\"").doesNotContain("max-width:1180px");
+        assertThat(MarkdownReport.render(data)).contains("## Manual work by impact").contains("| `Logs.get` | 1 | 1 |");
     }
 
     @Test
@@ -45,7 +61,7 @@ class ReportsTest {
     void callGraphExportFoldsOutlineRowsIntoOneScenario() {
         CallGraphExport.Export export = CallGraphExport.export(inventory, data.usedNodes());
 
-        assertThat(export.scenarios()).hasSize(8);
+        assertThat(export.scenarios()).hasSize(10);
         assertThat(export.scenarios()).filteredOn(s -> s.name().equals("Rejected login"))
                 .singleElement().satisfies(s -> assertThat(s.testCaseIds()).hasSize(3));
         // the unused "I log out" step and its code are not part of the exported graph

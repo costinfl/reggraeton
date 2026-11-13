@@ -1,4 +1,4 @@
-package io.reggraeton.translate;
+package io.reggraeton.scan.java;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -20,13 +20,13 @@ import java.util.Optional;
  * possible, otherwise through the imports (Selenium wildcard imports are checked against the
  * Selenium API on the classpath).
  */
-final class JavaTypes {
+public final class JavaTypes {
 
     private final CompilationUnit unit;
     private final Map<String, String> explicitImports = new HashMap<>();
     private final List<String> wildcardImports;
 
-    JavaTypes(CompilationUnit unit) {
+    public JavaTypes(CompilationUnit unit) {
         this.unit = unit;
         for (ImportDeclaration imp : unit.getImports()) {
             if (!imp.isStatic() && !imp.isAsterisk()) {
@@ -40,7 +40,7 @@ final class JavaTypes {
     }
 
     /** Fully qualified name of a simple (or partially qualified) type name, if it can be determined. */
-    Optional<String> qualify(String name) {
+    public Optional<String> qualify(String name) {
         String first = name.contains(".") ? name.substring(0, name.indexOf('.')) : name;
         String rest = name.contains(".") ? name.substring(name.indexOf('.')) : "";
         if (!first.isEmpty() && Character.isLowerCase(first.charAt(0))) {
@@ -58,12 +58,12 @@ final class JavaTypes {
         return Optional.empty();
     }
 
-    Optional<String> qualify(ClassOrInterfaceType type) {
+    public Optional<String> qualify(ClassOrInterfaceType type) {
         return qualify(type.getNameWithScope());
     }
 
     /** Declaring (or receiver) type of a method call. */
-    Optional<String> declaringType(MethodCallExpr call) {
+    public Optional<String> declaringType(MethodCallExpr call) {
         try {
             return Optional.of(call.resolve().declaringType().getQualifiedName());
         } catch (RuntimeException | StackOverflowError e) {
@@ -105,7 +105,7 @@ final class JavaTypes {
      * enclosing type) and qualified through the imports. Used when the symbol solver cannot resolve
      * the type, e.g. for classes of libraries that are not on the classpath.
      */
-    Optional<String> declaredType(NameExpr name) {
+    public Optional<String> declaredType(NameExpr name) {
         String id = name.getNameAsString();
         for (Node p = name.getParentNode().orElse(null); p != null; p = p.getParentNode().orElse(null)) {
             if (p instanceof com.github.javaparser.ast.stmt.BlockStmt block) {
@@ -143,7 +143,7 @@ final class JavaTypes {
     }
 
     /** Type created by {@code new X(...)}. */
-    Optional<String> createdType(ObjectCreationExpr creation) {
+    public Optional<String> createdType(ObjectCreationExpr creation) {
         try {
             return Optional.of(creation.resolve().declaringType().getQualifiedName());
         } catch (RuntimeException | StackOverflowError e) {
@@ -167,7 +167,7 @@ final class JavaTypes {
     }
 
     /** Whether the expression's static type is {@code java.lang.String} (best effort). */
-    static boolean isString(Expression e) {
+    public static boolean isString(Expression e) {
         try {
             ResolvedType type = e.calculateResolvedType();
             return type.isReferenceType() && type.asReferenceType().getQualifiedName().equals("java.lang.String");
@@ -176,7 +176,7 @@ final class JavaTypes {
         }
     }
 
-    static boolean classExists(String name) {
+    public static boolean classExists(String name) {
         try {
             Class.forName(name, false, JavaTypes.class.getClassLoader());
             return true;
@@ -199,7 +199,7 @@ final class JavaTypes {
         }
     }
 
-    static String code(Node node) {
+    public static String code(Node node) {
         String text = node.toString().replaceAll("\\s+", " ");
         return text.length() > 160 ? text.substring(0, 157) + "..." : text;
     }

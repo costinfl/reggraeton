@@ -19,6 +19,16 @@ public final class ApiClassifier {
      * @return the usage, or null for calls that need no conversion (JDK and friends)
      */
     public static ApiUsage classify(String declaringType, String member, String code, int line, MethodCallExpr call) {
+        return classify(declaringType, member, code, line, call, ExternalPolicy.defaults());
+    }
+
+    /**
+     * @param site   the call or object creation (used for argument-sensitive rules and Selenium type flow)
+     * @param policy what to do with calls into libraries outside the scanned repository
+     */
+    public static ApiUsage classify(String declaringType, String member, String code, int line,
+                                    com.github.javaparser.ast.expr.Expression site, ExternalPolicy policy) {
+        MethodCallExpr call = site instanceof MethodCallExpr m ? m : null;
         String typeName = JavaSourceIndex.withoutPackage(declaringType);
         String api = typeName + "." + member;
 
@@ -50,8 +60,16 @@ public final class ApiClassifier {
             return new ApiUsage(ApiUsage.CUCUMBER, api, code, line, ApiUsage.AUTO,
                     "kept in bdd mode, provided by the runtime support classes in native mode");
         }
-        return new ApiUsage(ApiUsage.EXTERNAL, api, code, line, ApiUsage.MANUAL,
-                "library outside the scanned repository; reggraeton cannot follow or translate it");
+        boolean selenium = site != null && SeleniumTypes.involved(site);
+        return switch (policy.decide(declaringType + "." + member, selenium)) {
+            case KEEP -> new ApiUsage(ApiUsage.EXTERNAL_KEPT, api, code, line, ApiUsage.AUTO,
+                    "kept as is (no Selenium object passes through it); the original project's dependencies are kept");
+            case DROP -> new ApiUsage(ApiUsage.EXTERNAL_DROPPED, api, code, line, ApiUsage.AUTO,
+                    "removed from the generated code (external.drop in reggraeton.properties)");
+            case MANUAL -> new ApiUsage(ApiUsage.EXTERNAL, api, code, line, ApiUsage.MANUAL, selenium
+                    ? "library outside the scanned repository that receives or returns Selenium objects; convert by hand"
+                    : "listed in external.manual (reggraeton.properties)");
+        };
     }
 
     private static boolean isDriverSetup(String declaringType, String member) {

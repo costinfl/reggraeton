@@ -16,7 +16,8 @@
     <p>Total: <span id="total">0.00</span> EUR</p>
     <label for="notes">Delivery note</label>
     <textarea id="notes" rows="3" cols="40"></textarea>
-    <p><button id="checkout" type="button">Check out</button></p>
+    <p><button id="checkout" type="button">Check out</button>
+       <button id="empty-cart" type="button">Empty cart</button></p>
     <div id="confirmation">Thank you for your order</div>
   </div>
 </main>
@@ -36,6 +37,13 @@
     body.appendChild(tr);
   }
   document.getElementById('total').textContent = total.toFixed(2);
+  document.getElementById('empty-cart').addEventListener('click', () => {
+    if (confirm('Empty the cart?')) {
+      localStorage.removeItem('cart');
+      body.innerHTML = '';
+      document.getElementById('total').textContent = '0.00';
+    }
+  });
   document.getElementById('checkout').addEventListener('click', () => {
     localStorage.setItem('lastOrderNote', document.getElementById('notes').value);
     localStorage.removeItem('cart');

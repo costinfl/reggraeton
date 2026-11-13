@@ -51,8 +51,15 @@ public final class JavaSourceIndex {
     private final Map<CompilationUnit, Source> sourceByUnit = new IdentityHashMap<>();
     private final List<Finding> problems = new ArrayList<>();
 
-    private JavaSourceIndex(Path root) {
+    private final ExternalPolicy policy;
+
+    private JavaSourceIndex(Path root, ExternalPolicy policy) {
         this.root = root;
+        this.policy = policy;
+    }
+
+    public ExternalPolicy policy() {
+        return policy;
     }
 
     /**
@@ -60,7 +67,12 @@ public final class JavaSourceIndex {
      * @param extraClasspath jars of the scanned project (optional) to improve type resolution
      */
     public static JavaSourceIndex build(Path root, Collection<Path> extraClasspath) {
-        JavaSourceIndex index = new JavaSourceIndex(root);
+        return build(root, extraClasspath, ExternalPolicy.defaults());
+    }
+
+    /** @param policy what to do with calls into libraries outside the repository (see {@link ExternalPolicy}) */
+    public static JavaSourceIndex build(Path root, Collection<Path> extraClasspath, ExternalPolicy policy) {
+        JavaSourceIndex index = new JavaSourceIndex(root, policy);
         index.load(extraClasspath);
         return index;
     }

@@ -18,6 +18,7 @@ import java.util.Optional;
  *   <tr><td>slow motion (ms)</td><td>slowMo</td><td>SLOW_MO</td><td>0</td></tr>
  *   <tr><td>action/assert timeout (ms)</td><td>timeout</td><td>PW_TIMEOUT</td><td>15000</td></tr>
  *   <tr><td>navigation timeout (ms)</td><td>navigationTimeout</td><td>PW_NAVIGATION_TIMEOUT</td><td>30000</td></tr>
+ *   <tr><td>default answer to JS dialogs</td><td>dialogs</td><td>DIALOGS</td><td>accept (dismiss)</td></tr>
  *   <tr><td>implicit wait for element lists (ms)</td><td>implicitWait</td><td>IMPLICIT_WAIT</td><td>0</td></tr>
  *   <tr><td>viewport</td><td>viewport</td><td>VIEWPORT</td><td>1366x768</td></tr>
  *   <tr><td>trace</td><td>trace</td><td>PW_TRACE</td><td>on-failure (on, off)</td></tr>
