@@ -88,11 +88,15 @@ public final class SeleniumApiCatalog {
         auto("WebDriver.Options.window", "see WebDriver.Window");
         auto("WebDriver.Options.timeouts", "see WebDriver.Timeouts");
         auto("WebDriver.Options.deleteAllCookies", "page.context().clearCookies()");
-        manual("WebDriver.Options.getCookies", "use page.context().cookies()");
-        manual("WebDriver.Options.getCookieNamed", "use page.context().cookies()");
-        manual("WebDriver.Options.addCookie", "use page.context().addCookies(...)");
-        manual("WebDriver.Options.deleteCookieNamed", "use page.context().clearCookies(new ClearCookiesOptions().setName(..))");
-        manual("WebDriver.Options.deleteCookie", "use page.context().clearCookies(...)");
+        auto("WebDriver.Options.getCookies", "Cookies.all(page)");
+        auto("WebDriver.Options.getCookieNamed", "Cookies.named(page, name)");
+        auto("WebDriver.Options.addCookie", "Cookies.add(page, cookie)");
+        auto("WebDriver.Options.deleteCookieNamed", "Cookies.delete(page, name)");
+        auto("WebDriver.Options.deleteCookie", "Cookies.delete(page, cookie)");
+        auto("Cookie.<init>", "support Cookie with Selenium's constructors");
+        for (String getter : List.of("getName", "getValue", "getDomain", "getPath", "getExpiry", "isSecure", "isHttpOnly", "getSameSite")) {
+            auto("Cookie." + getter, "same getter on the support Cookie");
+        }
         manual("WebDriver.Options.logs", "browser logs: subscribe to page.onConsoleMessage(...) instead");
         manual("Logs.get", "browser logs: subscribe to page.onConsoleMessage(...) instead");
         manual("LogEntries.getAll", "browser logs: subscribe to page.onConsoleMessage(...) instead");
@@ -122,8 +126,11 @@ public final class SeleniumApiCatalog {
         auto("Alert.sendKeys", "Dialogs.expectPrompt(text) is inserted before the action that opens the dialog");
 
         // JavaScript, screenshots
-        auto("JavascriptExecutor.executeScript", "page.evaluate(script)");
-        manual("JavascriptExecutor.executeAsyncScript", "rewrite the script to return a Promise and use page.evaluate");
+        auto("JavascriptExecutor.executeScript", "Scripts.execute(page, script, args...): arguments[], elements, return values as in Selenium");
+        auto("JavascriptExecutor.executeAsyncScript", "Scripts.executeAsync(page, script, args...): callback as last argument");
+        auto("Augmenter.<init>", "dropped");
+        auto("Augmenter.augment", "the driver itself: Playwright pages take screenshots without augmenting");
+        auto("Keys.chord", "support Keys.chord (same encoding); Elements.sendKeys presses it");
         auto("TakesScreenshot.getScreenshotAs", "page.screenshot()");
 
         // Select
@@ -136,9 +143,9 @@ public final class SeleniumApiCatalog {
         auto("Select.getAllSelectedOptions", "Elements.findAll(locator.locator(\"option:checked\"))");
         auto("Select.deselectAll", "locator.selectOption(new String[0])");
         auto("Select.getWrappedElement", "the select locator itself");
-        manual("Select.deselectByVisibleText", "rewrite with locator.selectOption(...)");
-        manual("Select.deselectByValue", "rewrite with locator.selectOption(...)");
-        manual("Select.deselectByIndex", "rewrite with locator.selectOption(...)");
+        auto("Select.deselectByVisibleText", "Selects.deselectByVisibleText(select, text) (multi-select only, like Selenium)");
+        auto("Select.deselectByValue", "Selects.deselectByValue(select, value)");
+        auto("Select.deselectByIndex", "Selects.deselectByIndex(select, index)");
         auto("Select.isMultiple", "locator.getAttribute(\"multiple\") != null");
 
         // Actions
@@ -168,7 +175,9 @@ public final class SeleniumApiCatalog {
         auto("FluentWait.pollingEvery", "dropped");
         auto("FluentWait.ignoring", "dropped");
         auto("FluentWait.withMessage", "dropped");
-        auto("FluentWait.until", "translated from the ExpectedCondition argument");
+        auto("FluentWait.until", "wait.<condition>(..) for ExpectedConditions, wait.until(page -> ..) for lambdas and custom conditions");
+        auto("ExpectedCondition.<init>", "anonymous condition becomes a java.util.function.Function<Page, T>");
+        auto("ExpectedCondition.apply", "Function.apply");
         for (String condition : List.of("visibilityOfElementLocated", "visibilityOf", "elementToBeClickable",
                 "presenceOfElementLocated", "invisibilityOfElementLocated", "invisibilityOf",
                 "textToBePresentInElement", "textToBePresentInElementLocated", "textToBe",
@@ -230,13 +239,10 @@ public final class SeleniumApiCatalog {
             }
         }
         if (call != null && support.auto()) {
-            if (api.endsWith("JavascriptExecutor.executeScript") && call.getArguments().size() > 1) {
-                return Support.manual("executeScript with arguments: rewrite as locator.evaluate(\"el => ...\")");
-            }
             if (api.endsWith(".until") && call.getArguments().size() == 1) {
                 Expression condition = call.getArgument(0);
-                if (!(condition instanceof MethodCallExpr m && isExpectedConditions(m))) {
-                    return Support.manual("custom wait condition: rewrite with locator.waitFor / assertThat");
+                if (!(condition instanceof MethodCallExpr m && m.getScope().map(sc -> sc.toString().equals("ExpectedConditions")).orElse(false))) {
+                    return support; // lambda, method reference or condition object: Waits.until(Function<Page, T>)
                 }
                 String name = ((MethodCallExpr) condition).getNameAsString();
                 Support conditionSupport = ENTRIES.get("ExpectedConditions." + name);

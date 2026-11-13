@@ -44,6 +44,21 @@ public final class RunConfig {
         return get("browser.channel", "BROWSER_CHANNEL", "msedge").trim().toLowerCase(Locale.ROOT);
     }
 
+    /**
+     * Name of the browser in use, for logging (what Selenium's {@code options.getBrowserName()} was used for):
+     * {@code MicrosoftEdge}, {@code chrome}, {@code chromium}, or the executable's path.
+     */
+    public static String browserName() {
+        if (browserExecutable().isPresent()) {
+            return browserExecutable().get().toString();
+        }
+        return switch (browserChannel()) {
+            case "msedge", "msedge-beta", "msedge-dev" -> "MicrosoftEdge";
+            case "chrome", "chrome-beta", "chrome-dev" -> "chrome";
+            default -> browserChannel();
+        };
+    }
+
     public static Optional<Path> browserExecutable() {
         String value = get("browser.executable", "BROWSER_EXECUTABLE", "");
         return value.isBlank() ? Optional.empty() : Optional.of(Path.of(value.trim()));

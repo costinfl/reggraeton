@@ -79,6 +79,9 @@ public final class ApiClassifier {
             return false;
         }
         String simple = declaringType.substring(declaringType.lastIndexOf('.') + 1);
+        if (simple.equals("Augmenter")) {
+            return false; // new Augmenter().augment(driver): translated, not driver setup
+        }
         return member.equals("<init>") || simple.endsWith("Options") || simple.endsWith("Service")
                 || simple.endsWith("Capabilities");
     }

@@ -191,6 +191,37 @@ public final class Waits {
         return locator.all();
     }
 
+    // Custom conditions -------------------------------------------------------------------------
+
+    /**
+     * Selenium {@code wait.until(driver -> ...)}: calls {@code condition} until it returns something other
+     * than null or false, ignoring "element not found" style errors meanwhile (as WebDriverWait does),
+     * and returns that value.
+     */
+    public <T> T until(java.util.function.Function<Page, T> condition) {
+        long deadline = System.nanoTime() + (long) (timeout() * 1_000_000);
+        RuntimeException last = null;
+        while (true) {
+            try {
+                T value = condition.apply(page);
+                if (value != null && !Boolean.FALSE.equals(value)) {
+                    return value;
+                }
+            } catch (com.microsoft.playwright.PlaywrightException | IndexOutOfBoundsException e) {
+                last = e;
+            }
+            if (System.nanoTime() > deadline) {
+                com.microsoft.playwright.TimeoutError timeout = new com.microsoft.playwright.TimeoutError(
+                        "Condition not met within " + (long) timeout() + " ms");
+                if (last != null) {
+                    timeout.addSuppressed(last);
+                }
+                throw timeout;
+            }
+            page.waitForTimeout(100);
+        }
+    }
+
     // Page conditions ---------------------------------------------------------------------------
 
     /** {@code alertIsPresent}: a dialog was opened (and answered, see {@link Dialogs}). */

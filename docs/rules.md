@@ -29,6 +29,8 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `Alert.dismiss` | Dialogs.expectDismiss() is inserted before the action that opens the dialog |
 | `Alert.getText` | message of the recorded dialog |
 | `Alert.sendKeys` | Dialogs.expectPrompt(text) is inserted before the action that opens the dialog |
+| `Augmenter.<init>` | dropped |
+| `Augmenter.augment` | the driver itself: Playwright pages take screenshots without augmenting |
 | `By.className` | Playwright selector |
 | `By.cssSelector` | Playwright selector |
 | `By.id` | Playwright selector |
@@ -37,6 +39,17 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `By.partialLinkText` | Playwright selector |
 | `By.tagName` | Playwright selector |
 | `By.xpath` | Playwright selector |
+| `Cookie.<init>` | support Cookie with Selenium's constructors |
+| `Cookie.getDomain` | same getter on the support Cookie |
+| `Cookie.getExpiry` | same getter on the support Cookie |
+| `Cookie.getName` | same getter on the support Cookie |
+| `Cookie.getPath` | same getter on the support Cookie |
+| `Cookie.getSameSite` | same getter on the support Cookie |
+| `Cookie.getValue` | same getter on the support Cookie |
+| `Cookie.isHttpOnly` | same getter on the support Cookie |
+| `Cookie.isSecure` | same getter on the support Cookie |
+| `ExpectedCondition.<init>` | anonymous condition becomes a java.util.function.Function<Page, T> |
+| `ExpectedCondition.apply` | Function.apply |
 | `ExpectedConditions.alertIsPresent` | wait.alert() |
 | `ExpectedConditions.attributeToBe` | locator.waitFor / assertThat(...) |
 | `ExpectedConditions.elementToBeClickable` | locator.waitFor / assertThat(...) |
@@ -60,15 +73,20 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `FluentWait.<init>` | dropped; waits become web-first assertions / waitFor |
 | `FluentWait.ignoring` | dropped |
 | `FluentWait.pollingEvery` | dropped |
-| `FluentWait.until` | translated from the ExpectedCondition argument |
+| `FluentWait.until` | wait.<condition>(..) for ExpectedConditions, wait.until(page -> ..) for lambdas and custom conditions |
 | `FluentWait.withMessage` | dropped |
 | `FluentWait.withTimeout` | timeout option on the generated wait |
-| `JavascriptExecutor.executeScript` | page.evaluate(script) |
+| `JavascriptExecutor.executeAsyncScript` | Scripts.executeAsync(page, script, args...): callback as last argument |
+| `JavascriptExecutor.executeScript` | Scripts.execute(page, script, args...): arguments[], elements, return values as in Selenium |
+| `Keys.chord` | support Keys.chord (same encoding); Elements.sendKeys presses it |
 | `PageFactory.initElements` | dropped (locators are lazy in Playwright) |
 | `SearchContext.findElement` | locator.locator(selector) |
 | `SearchContext.findElements` | locator.locator(selector).all() |
 | `Select.<init>` | dropped; calls become locator.selectOption(...) |
 | `Select.deselectAll` | locator.selectOption(new String[0]) |
+| `Select.deselectByIndex` | Selects.deselectByIndex(select, index) |
+| `Select.deselectByValue` | Selects.deselectByValue(select, value) |
+| `Select.deselectByVisibleText` | Selects.deselectByVisibleText(select, text) (multi-select only, like Selenium) |
 | `Select.getAllSelectedOptions` | Elements.findAll(locator.locator("option:checked")) |
 | `Select.getFirstSelectedOption` | locator.locator("option:checked").first() |
 | `Select.getOptions` | Elements.findAll(locator.locator("option")) |
@@ -82,7 +100,12 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `WebDriver.Navigation.forward` | page.goForward() |
 | `WebDriver.Navigation.refresh` | page.reload() |
 | `WebDriver.Navigation.to` | page.navigate(url) |
+| `WebDriver.Options.addCookie` | Cookies.add(page, cookie) |
 | `WebDriver.Options.deleteAllCookies` | page.context().clearCookies() |
+| `WebDriver.Options.deleteCookie` | Cookies.delete(page, cookie) |
+| `WebDriver.Options.deleteCookieNamed` | Cookies.delete(page, name) |
+| `WebDriver.Options.getCookieNamed` | Cookies.named(page, name) |
+| `WebDriver.Options.getCookies` | Cookies.all(page) |
 | `WebDriver.Options.timeouts` | see WebDriver.Timeouts |
 | `WebDriver.Options.window` | see WebDriver.Window |
 | `WebDriver.TargetLocator.activeElement` | page.locator("*:focus") |
@@ -138,19 +161,10 @@ Calls into libraries outside the scanned repository are always manual. Driver cr
 | `ExpectedConditions.frameToBeAvailableAndSwitchToIt` | frames: use page.frameLocator(selector) |
 | `ExpectedConditions.numberOfWindowsToBe` | windows: use context.pages() |
 | `ExpectedConditions.stalenessOf` | rewrite with locator.waitFor(DETACHED) |
-| `JavascriptExecutor.executeAsyncScript` | rewrite the script to return a Promise and use page.evaluate |
 | `LogEntries.filter` | browser logs: subscribe to page.onConsoleMessage(...) instead |
 | `LogEntries.getAll` | browser logs: subscribe to page.onConsoleMessage(...) instead |
 | `LogEntries.iterator` | browser logs: subscribe to page.onConsoleMessage(...) instead |
 | `Logs.get` | browser logs: subscribe to page.onConsoleMessage(...) instead |
-| `Select.deselectByIndex` | rewrite with locator.selectOption(...) |
-| `Select.deselectByValue` | rewrite with locator.selectOption(...) |
-| `Select.deselectByVisibleText` | rewrite with locator.selectOption(...) |
-| `WebDriver.Options.addCookie` | use page.context().addCookies(...) |
-| `WebDriver.Options.deleteCookie` | use page.context().clearCookies(...) |
-| `WebDriver.Options.deleteCookieNamed` | use page.context().clearCookies(new ClearCookiesOptions().setName(..)) |
-| `WebDriver.Options.getCookieNamed` | use page.context().cookies() |
-| `WebDriver.Options.getCookies` | use page.context().cookies() |
 | `WebDriver.Options.logs` | browser logs: subscribe to page.onConsoleMessage(...) instead |
 | `WebDriver.TargetLocator.defaultContent` | frames: go back to using page |
 | `WebDriver.TargetLocator.frame` | frames: use page.frameLocator(selector) for the following calls |

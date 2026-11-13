@@ -9,7 +9,8 @@ public final class SupportNames {
     /** Support classes copied from {@code reggraeton-runtime} into every generated project. */
     public static final Set<String> RUNTIME_CLASSES = Set.of(
             "Waits", "Locators", "PendingConversion", "PendingConversionException", "PlaywrightSession",
-            "RunConfig", "Keys", "Elements", "Screenshots", "Dialogs", "Alert");
+            "RunConfig", "Keys", "Elements", "Screenshots", "Dialogs", "Alert",
+            "Scripts", "Cookies", "Cookie", "Selects");
 
     /** Additional support classes of native-mode projects (no Cucumber at run time). */
     public static final Set<String> NATIVE_CLASSES = Set.of(

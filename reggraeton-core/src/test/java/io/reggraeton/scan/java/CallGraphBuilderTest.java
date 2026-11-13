@@ -102,9 +102,9 @@ class CallGraphBuilderTest {
         CallGraph.Node step = node(graph, "x.Steps#something()");
 
         assertThat(step.apiUsages()).filteredOn(u -> u.api().equals("JavascriptExecutor.executeScript"))
-                .extracting(ApiUsage::support).containsExactly(ApiUsage.MANUAL, ApiUsage.AUTO);
+                .extracting(ApiUsage::support).containsExactly(ApiUsage.AUTO, ApiUsage.AUTO); // Scripts.execute handles arguments
         assertThat(step.apiUsages()).filteredOn(u -> u.api().equals("FluentWait.until"))
-                .singleElement().satisfies(u -> assertThat(u.support()).isEqualTo(ApiUsage.MANUAL));
+                .singleElement().satisfies(u -> assertThat(u.support()).isEqualTo(ApiUsage.AUTO)); // Waits.until(lambda)
         assertThat(step.apiUsages()).filteredOn(u -> u.category().equals(ApiUsage.EXTERNAL))
                 .singleElement().satisfies(u -> {
                     assertThat(u.api()).isEqualTo("Evidence.attach");

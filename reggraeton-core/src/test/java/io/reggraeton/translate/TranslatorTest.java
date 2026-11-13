@@ -33,8 +33,9 @@ class TranslatorTest {
         Set<String> methods = new HashSet<>();
         index.types().values().forEach(t -> t.getMethods().forEach(m -> methods.add(m.getNameAsString())));
         Map<String, TranslatedSource> result = new LinkedHashMap<>();
+        io.reggraeton.scan.java.DriverWrappers wrappers = io.reggraeton.scan.java.DriverWrappers.find(index);
         for (JavaSourceIndex.Source s : index.sources()) {
-            TranslatedSource t = new SourceTranslator(s.unit(), s.path(), index, new SupportNames(SUPPORT), methods).translate();
+            TranslatedSource t = new SourceTranslator(s.unit(), s.path(), index, new SupportNames(SUPPORT), methods, wrappers).translate();
             result.put(t.primaryType(), t);
         }
         return result;
@@ -89,7 +90,7 @@ class TranslatorTest {
                 .contains("List<Locator> rows = Elements.findAll(driver.locator(\"tr.row\"));")
                 .contains("driver.locator(\"xpath=//input[@id='\" + user + \"']\").first().inputValue()")
                 .contains("driver.locator(\"#sort\").selectOption(\"asc\");")
-                .contains("driver.evaluate(\"() => { window.scrollTo(0, 0); }\");")
+                .contains("Scripts.execute(driver, \"window.scrollTo(0, 0);\");")
                 .contains("byte[] png = driver.screenshot();")
                 .contains("// reggraeton: removed driver.manage().window().maximize();")
                 .contains("driver.locator(\"a:text-is(\\\"Cart\\\")\").first().isVisible()")
@@ -155,7 +156,7 @@ class TranslatorTest {
                     private WebDriver driver;
                     public String accept() {
                         driver.switchTo().frame("payment");
-                        Object cookies = driver.manage().getCookies();
+                        Object logs = driver.manage().logs();
                         String text = driver.getWindowHandle();
                         Evidence.attach(driver, "x");
                         try {
@@ -171,11 +172,11 @@ class TranslatorTest {
         TranslatedSource t = translate(dir).get("Page3");
 
         assertThat(t.todos()).extracting(TranslatedSource.Todo::api)
-                .contains("WebDriver.TargetLocator.frame", "WebDriver.Options.getCookies", "WebDriver.getWindowHandle", "Evidence.attach");
+                .contains("WebDriver.TargetLocator.frame", "WebDriver.Options.logs", "WebDriver.getWindowHandle", "Evidence.attach");
         assertThat(t.source())
                 .contains("// TODO(reggraeton) WebDriver.TargetLocator.frame")
                 .contains("PendingConversion.fail(\"Page3.java:")
-                .contains("Object cookies = PendingConversion.fail(")
+                .contains("Object logs = PendingConversion.fail(")
                 .contains("String text = PendingConversion.fail(")
                 .contains("catch (PlaywrightException e)")
                 .doesNotContain("org.openqa.selenium");
@@ -333,6 +334,148 @@ class TranslatorTest {
                 .contains("if ((country.getAttribute(\"multiple\") != null)) {")
                 .contains("country.selectOption(new String[0]);")
                 .contains("country.isEnabled()");
+    }
+
+    @Test
+    void convertsDriverWrappersAndTheirUsers(@TempDir Path dir) {
+        new TempRepo(dir).java("x", "SmartDriver", """
+                import org.openqa.selenium.*;
+                import org.openqa.selenium.remote.Augmenter;
+                import java.util.List;
+                import java.util.Set;
+                public class SmartDriver implements WebDriver, JavascriptExecutor, TakesScreenshot {
+                    private final WebDriver driver;
+                    public SmartDriver(WebDriver driver) { this.driver = driver; }
+                    @Override public void get(String url) { System.out.println("open " + url); driver.get(url); }
+                    @Override public String getCurrentUrl() { return driver.getCurrentUrl(); }
+                    @Override public String getTitle() { return driver.getTitle(); }
+                    @Override public List<WebElement> findElements(By by) { return driver.findElements(by); }
+                    @Override public WebElement findElement(By by) { return driver.findElement(by); }
+                    @Override public String getPageSource() { return driver.getPageSource(); }
+                    @Override public void close() { driver.close(); }
+                    @Override public void quit() { driver.quit(); }
+                    @Override public Set<String> getWindowHandles() { return driver.getWindowHandles(); }
+                    @Override public String getWindowHandle() { return driver.getWindowHandle(); }
+                    @Override public TargetLocator switchTo() { return driver.switchTo(); }
+                    @Override public Navigation navigate() { return driver.navigate(); }
+                    @Override public Options manage() { return driver.manage(); }
+                    @Override public Object executeScript(String script, Object... args) { return ((JavascriptExecutor) driver).executeScript(script, args); }
+                    @Override public Object executeAsyncScript(String script, Object... args) { return ((JavascriptExecutor) driver).executeAsyncScript(script, args); }
+                    @Override public <X> X getScreenshotAs(OutputType<X> type) { return ((TakesScreenshot) new Augmenter().augment(driver)).getScreenshotAs(type); }
+                    public byte[] evidence() { return ((TakesScreenshot) new Augmenter().augment(driver)).getScreenshotAs(OutputType.BYTES); }
+                }
+                """).java("x", "LoginPage", """
+                import org.openqa.selenium.*;
+                public class LoginPage {
+                    private final WebDriver driver;
+                    public LoginPage(WebDriver driver) { this.driver = driver; }
+                    public void open() { driver.get("/login"); }
+                }
+                """).java("x", "Steps", """
+                import org.openqa.selenium.*;
+                public class Steps {
+                    private final SmartDriver driver;
+                    public Steps(SmartDriver driver) { this.driver = driver; }
+                    public String go() {
+                        driver.get("/x");
+                        new LoginPage(driver).open();
+                        driver.findElement(By.id("a")).click();
+                        Cookie session = driver.manage().getCookieNamed("session");
+                        driver.navigate().refresh();
+                        byte[] png = driver.getScreenshotAs(OutputType.BYTES);
+                        Object height = driver.executeScript("return arguments[0].offsetHeight", driver.findElement(By.id("a")));
+                        WebDriver plain = driver;
+                        return session.getValue() + png.length + height + plain.getTitle();
+                    }
+                }
+                """);
+
+        Map<String, TranslatedSource> t = translate(dir);
+        String wrapper = t.get("SmartDriver").source();
+        String steps = t.get("Steps").source();
+
+        assertThat(wrapper)
+                .contains("public class SmartDriver {")
+                .doesNotContain("@Override").doesNotContain("switchTo()").doesNotContain("manage()").doesNotContain("getScreenshotAs")
+                .contains("System.out.println(\"open \" + url);")                 // custom logic kept
+                .contains("return Scripts.execute(driver, script, args);")
+                .contains("return driver.screenshot();")                          // Augmenter dropped
+                .contains("public Page page() {").contains("return this.driver;");
+        assertThat(steps)
+                .contains("driver.get(\"/x\");")                                 // still through the wrapper
+                .contains("new LoginPage(driver.page()).open();")
+                .contains("driver.findElement(\"#a\").click();")
+                .contains("Cookie session = Cookies.named(driver.page(), \"session\");")
+                .contains("driver.page().reload();")
+                .contains("byte[] png = driver.page().screenshot();")
+                .contains("Page plain = driver.page();");
+        assertThat(t.get("SmartDriver").todos()).extracting(TranslatedSource.Todo::api)
+                .containsExactlyInAnyOrder("WebDriver.getWindowHandles", "WebDriver.getWindowHandle");
+        assertThat(t.get("Steps").todos()).isEmpty();
+
+        Map<String, String> sources = new LinkedHashMap<>();
+        t.values().forEach(s -> sources.put(s.relativePath(), s.source()));
+        RuntimeSources.load(SUPPORT).forEach((name, source) -> sources.put("regression/support/" + name + ".java", source));
+        assertThat(InMemoryCompiler.compile(sources, dir.resolve("compile"))).as("compiler errors").isEmpty();
+    }
+
+    @Test
+    void translatesTheHighImpactPatternsFromTheRealSuite(@TempDir Path dir) {
+        new TempRepo(dir).java("x", "Base", imports() + """
+                import org.openqa.selenium.edge.EdgeOptions;
+                import java.util.function.Function;
+                public class Base {
+                    private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger("x");
+                    private final EdgeOptions options = new EdgeOptions();
+                    private WebDriver driver;
+                    public Base() {
+                        options.addArguments("--start-maximized");
+                        LOG.info("Browser: " + options.getBrowserName());
+                    }
+                    public String run() {
+                        Cookie token = driver.manage().getCookieNamed("token");
+                        driver.manage().addCookie(new Cookie("theme", "dark"));
+                        WebElement box = driver.findElement(By.id("q"));
+                        box.clear();
+                        box.sendKeys(Keys.chord(Keys.CONTROL + "a"));
+                        box.sendKeys(Keys.chord(Keys.COMMAND, "a"));
+                        new Select(driver.findElement(By.id("tags"))).deselectByVisibleText("old");
+                        Boolean done = new WebDriverWait(driver, Duration.ofSeconds(5)).until(d -> d.findElement(By.id("done")).isDisplayed());
+                        WebElement row = new WebDriverWait(driver, Duration.ofSeconds(5)).until(new ExpectedCondition<WebElement>() {
+                            @Override
+                            public WebElement apply(WebDriver d) {
+                                return d.findElements(By.cssSelector("tr")).isEmpty() ? null : d.findElements(By.cssSelector("tr")).get(0);
+                            }
+                        });
+                        Long scrolled = (Long) ((JavascriptExecutor) driver).executeScript("return window.scrollY;");
+                        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", row);
+                        return token.getValue() + done + scrolled;
+                    }
+                }
+                """);
+
+        TranslatedSource t = translate(dir).get("Base");
+
+        assertThat(t.todos()).isEmpty();
+        assertThat(t.source())
+                .contains("LOG.info(\"Browser: \" + RunConfig.browserName());")
+                .containsPattern("private final Object options = /\\* reggraeton: was new EdgeOptions\\(\\);[^*]*\\*/\\s*null;")
+                .contains("// reggraeton: removed options.addArguments(\"--start-maximized\");")
+                .contains("Cookie token = Cookies.named(driver, \"token\");")
+                .contains("Cookies.add(driver, new Cookie(\"theme\", \"dark\"));")
+                .contains("Elements.sendKeys(box, Keys.chord(Keys.CONTROL + \"a\"));")      // not fill(): key chords
+                .contains("Elements.sendKeys(box, Keys.chord(Keys.COMMAND, \"a\"));")
+                .contains("Selects.deselectByVisibleText(driver.locator(\"#tags\"), \"old\");")
+                .contains("new Waits(driver, Duration.ofSeconds(5)).until(d -> d.locator(\"#done\").isVisible());")
+                .contains("new java.util.function.Function<Page, Locator>() {")
+                .contains("public Locator apply(Page d) {")
+                .contains("Long scrolled = (Long) Scripts.execute(driver, \"return window.scrollY;\");")
+                .contains("Scripts.execute(driver, \"arguments[0].scrollIntoView(true);\", row);");
+
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put(t.relativePath(), t.source());
+        RuntimeSources.load(SUPPORT).forEach((name, source) -> sources.put("regression/support/" + name + ".java", source));
+        assertThat(InMemoryCompiler.compile(sources, dir.resolve("compile"))).as("compiler errors").isEmpty();
     }
 
     @Test
