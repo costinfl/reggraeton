@@ -94,6 +94,8 @@ public final class HtmlReport {
         }
         closeSection(h);
 
+        database(h, data);
+
         // test cases
         openSection(h, "tests-section", "Test cases", String.valueOf(data.tests().size()), data.tests().size() <= OPEN_LIMIT);
         h.append("<div class=\"filters\"><input class=\"filter\" placeholder=\"Filter test cases...\" data-target=\"tests\">")
@@ -214,6 +216,90 @@ public final class HtmlReport {
 
         h.append("</main><script>").append(JS).append("</script></body></html>\n");
         return h.toString();
+    }
+
+    private static void database(StringBuilder h, ReportData data) {
+        var db = data.database();
+        List<ReportData.DatabaseEntry> entries = data.databaseEntries();
+        long hooks = entries.stream().filter(ReportData.DatabaseEntry::hook).count();
+        long writing = db.statements().stream().filter(io.reggraeton.model.DatabaseInventory.SqlStatement::writes).count();
+        boolean any = !entries.isEmpty() || !data.databaseNodes().isEmpty() || !db.statements().isEmpty() || !db.connections().isEmpty();
+        openSection(h, "database", "Database access", data.testsReachingDatabase() + " tests reach it, " + plural((int) hooks, "hook")
+                + ", " + plural(db.statements().size(), "SQL statement"), any);
+        if (!any) {
+            h.append("<p>No database access found.</p>");
+            closeSection(h);
+            return;
+        }
+        h.append("<p class=\"muted small\">Database calls (JDBC, Spring, JPA/Hibernate, Oracle driver, DbUnit, MyBatis ...) ")
+                .append("and SQL are <b>kept as they are</b> in the generated tests, so those tests need the same database. ")
+                .append("Hooks that change data prepare or clean up test data: if a scenario fails half-way, whatever ")
+                .append("they or the application changed stays changed. ")
+                .append("<b>Changes data</b> includes sequence increments (<code>NEXTVAL</code>), procedure calls and functions ")
+                .append("called from <code>SELECT ... FROM DUAL</code>, which may write.</p>");
+        h.append("<section class=\"tiles\">");
+        tile(h, "Tests reaching it", data.testsReachingDatabase(), "of " + data.tests().size(), data.testsReachingDatabase() > 0 ? "warn" : "ok");
+        tile(h, "Hooks", (int) hooks, "with database access", hooks > 0 ? "warn" : "ok");
+        tile(h, "Steps", (int) (entries.size() - hooks), "with database access");
+        tile(h, "Methods", data.databaseNodes().size(), "calling the database directly");
+        tile(h, "SQL statements", db.statements().size(), writing + " change data", writing > 0 ? "warn" : "ok");
+        tile(h, "Connections", db.connections().size(), "strings &amp; settings");
+        h.append("</section>");
+
+        if (!entries.isEmpty()) {
+            h.append("<h3>Hooks and steps reaching the database</h3><table><thead><tr><th>Kind</th><th>Hook / step</th>")
+                    .append("<th>Location</th><th>Database work</th><th>Changes data</th><th class=\"num\">Tests</th></tr></thead><tbody>");
+            for (ReportData.DatabaseEntry e : entries) {
+                h.append("<tr><td><span class=\"pill ").append(e.hook() ? (e.reach().writes() ? "bad" : "warn") : "info").append("\">")
+                        .append(esc(e.kind())).append("</span></td><td><code>").append(esc(e.label())).append("</code><br><span class=\"muted small\">")
+                        .append(esc(e.id())).append("</span></td><td><code>").append(esc(e.file() + ":" + e.line())).append("</code></td><td>")
+                        .append(esc(e.reach().summary())).append("</td><td>").append(e.reach().writes() ? "<b>yes</b>" : "no")
+                        .append("</td><td class=\"num\">").append(e.tests()).append("</td></tr>");
+            }
+            h.append("</tbody></table>");
+        }
+        if (!data.databaseNodes().isEmpty()) {
+            h.append("<h3>Methods calling the database</h3><table><thead><tr><th class=\"num\">Tests reaching</th><th>Method</th>")
+                    .append("<th>Location</th><th>Database work</th></tr></thead><tbody>");
+            for (ReportData.DatabaseNode n : data.databaseNodes()) {
+                h.append("<tr><td class=\"num\">").append(n.tests()).append("</td><td><code>").append(esc(n.node().id()))
+                        .append("</code></td><td><code>").append(esc(n.node().file() + ":" + n.node().line())).append("</code></td><td>")
+                        .append(esc(n.reach().summary())).append(n.reach().writes() ? " <span class=\"pill warn\">changes data</span>" : "")
+                        .append("</td></tr>");
+            }
+            h.append("</tbody></table>");
+        }
+        if (!data.databaseStatements().isEmpty()) {
+            int shown = Math.min(data.databaseStatements().size(), SITE_LIMIT);
+            h.append("<h3>SQL statements</h3>");
+            if (shown < data.databaseStatements().size()) {
+                h.append("<p class=\"muted small\">First ").append(shown).append(" of ").append(data.databaseStatements().size())
+                        .append("; all are in <code>inventory.json</code>.</p>");
+            }
+            h.append("<input class=\"filter\" placeholder=\"Filter SQL...\" data-target=\"sql\">")
+                    .append("<table id=\"sql\"><thead><tr><th>Location</th><th>Operations</th><th>Statement</th>")
+                    .append("<th class=\"num\">Tests reaching</th></tr></thead><tbody>");
+            for (ReportData.DatabaseStatement st : data.databaseStatements().subList(0, shown)) {
+                var s = st.statement();
+                h.append("<tr><td><code>").append(esc(s.file() + ":" + s.line())).append("</code></td><td>")
+                        .append(esc(String.join(", ", s.operations())))
+                        .append(s.writes() ? " <span class=\"pill warn\">changes data</span>" : "").append("</td><td><code>")
+                        .append(esc(s.text())).append("</code></td><td class=\"num\">").append(st.tests() < 0 ? "" : String.valueOf(st.tests()))
+                        .append("</td></tr>");
+            }
+            h.append("</tbody></table>");
+        }
+        if (!db.connections().isEmpty()) {
+            h.append("<h3>Connection strings and settings</h3><p class=\"muted small\">Passwords are masked.</p>")
+                    .append("<table><thead><tr><th>Location</th><th>Setting</th><th>Value</th></tr></thead><tbody>");
+            for (var c : db.connections()) {
+                h.append("<tr><td><code>").append(esc(c.file() + ":" + c.line())).append("</code></td><td><code>")
+                        .append(c.key() == null ? "" : esc(c.key())).append("</code></td><td><code>").append(esc(c.value()))
+                        .append("</code></td></tr>");
+            }
+            h.append("</tbody></table>");
+        }
+        closeSection(h);
     }
 
     /** Sections with more rows than this start collapsed. */

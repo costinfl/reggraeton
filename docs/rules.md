@@ -2,9 +2,10 @@
 
 Generated with `reggraeton rules`. **auto**: rewritten by `convert`. **manual**: replaced by a
 `TODO(reggraeton)` stub that throws `PendingConversionException` until a human rewrites it.
-Calls into libraries outside the scanned repository are always manual. Driver creation
+Calls into other libraries are kept unless Selenium objects pass through them. Driver creation
 (`new ChromeDriver(..)`, browser options, WebDriverManager) is replaced by the generated
-`PlaywrightSession`; JUnit/AssertJ/Hamcrest/TestNG assertions are kept as they are.
+`PlaywrightSession`; JUnit/AssertJ/Hamcrest/TestNG assertions and database access
+(JDBC, Spring, JPA/Hibernate, Oracle driver, SQL) are kept as they are.
 
 ## Translated automatically
 

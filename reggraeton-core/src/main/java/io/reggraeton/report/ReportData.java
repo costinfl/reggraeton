@@ -55,6 +55,28 @@ public final class ReportData {
     public record ImpactBySite(String api, String file, int line, String code, String note, int testsAffected) {
     }
 
+    /**
+     * A hook or step definition whose code reaches the database.
+     *
+     * @param kind  {@code @Before hook}, {@code @After hook}, ... or {@code step}
+     * @param label tag expression of a hook, pattern of a step definition
+     * @param tests test cases using this hook or step
+     */
+    public record DatabaseEntry(String kind, String id, String label, String file, int line,
+                                io.reggraeton.scan.db.DatabaseAccess.Reach reach, int tests) {
+        public boolean hook() {
+            return !"step".equals(kind);
+        }
+    }
+
+    /** A method that accesses the database directly, and the test cases whose code reaches it. */
+    public record DatabaseNode(CallGraph.Node node, io.reggraeton.scan.db.DatabaseAccess.Reach reach, int tests) {
+    }
+
+    /** @param tests test cases reaching the method containing the SQL; -1 when not in Java code */
+    public record DatabaseStatement(io.reggraeton.model.DatabaseInventory.SqlStatement statement, int tests) {
+    }
+
     private final Inventory inventory;
     private final TestNaming naming;
     private final Totals totals;
@@ -65,6 +87,11 @@ public final class ReportData {
     private final Set<String> usedNodes = new LinkedHashSet<>();
     private final List<ImpactByApi> impactByApi = new ArrayList<>();
     private final List<ImpactBySite> impactBySite = new ArrayList<>();
+    private final io.reggraeton.scan.db.DatabaseAccess databaseAccess;
+    private final Map<String, java.util.BitSet> testsByDatabaseNode = new HashMap<>();
+    private final List<DatabaseEntry> databaseEntries = new ArrayList<>();
+    private final List<DatabaseNode> databaseNodes = new ArrayList<>();
+    private final List<DatabaseStatement> databaseStatements = new ArrayList<>();
 
     public ReportData(Inventory inventory, TestNaming naming) {
         this.inventory = inventory;
@@ -88,7 +115,9 @@ public final class ReportData {
             a.stepDefinitionIds().forEach(id -> usedNodes.addAll(assessor.reachable(id)));
             a.hookIds().forEach(id -> usedNodes.addAll(assessor.reachable(id)));
         }
+        databaseAccess = new io.reggraeton.scan.db.DatabaseAccess(inventory.callGraph());
         computeImpact(assessor);
+        computeDatabase(assessor);
 
         Map<String, int[]> siteCounts = new TreeMap<>();
         Map<String, ApiUsage> sample = new HashMap<>();
@@ -160,6 +189,9 @@ public final class ReportData {
             a.stepDefinitionIds().forEach(id -> reached.addAll(assessor.reachable(id)));
             a.hookIds().forEach(id -> reached.addAll(assessor.reachable(id)));
             for (String nodeId : reached) {
+                if (databaseAccess.accessesDatabase(nodeId)) {
+                    testsByDatabaseNode.computeIfAbsent(nodeId, k -> new java.util.BitSet()).set(t);
+                }
                 CallGraph.Node node = nodesById.get(nodeId);
                 if (node == null) {
                     continue;
@@ -187,6 +219,68 @@ public final class ReportData {
                 testsByApi.get(api).cardinality())));
         impactByApi.sort(Comparator.comparingInt(ImpactByApi::testsAffected).reversed()
                 .thenComparing(ImpactByApi::sites, Comparator.reverseOrder()).thenComparing(ImpactByApi::api));
+    }
+
+    private void computeDatabase(Assessor assessor) {
+        Map<String, Integer> testsPerEntry = new HashMap<>();
+        for (TestCaseAssessment a : inventory.assessments()) {
+            new LinkedHashSet<>(a.hookIds()).forEach(id -> testsPerEntry.merge(id, 1, Integer::sum));
+            new LinkedHashSet<>(a.stepDefinitionIds()).forEach(id -> testsPerEntry.merge(id, 1, Integer::sum));
+        }
+        for (io.reggraeton.model.Hook h : inventory.hooks()) {
+            var reach = databaseAccess.reach(assessor.reachable(h.id()));
+            if (!reach.isEmpty()) {
+                databaseEntries.add(new DatabaseEntry("@" + h.phase() + " hook", h.id(),
+                        h.tagExpression().isBlank() ? "every scenario" : h.tagExpression(), h.file(), h.line(), reach,
+                        h.phase().endsWith("All") ? inventory.testCases().size() : testsPerEntry.getOrDefault(h.id(), 0)));
+            }
+        }
+        for (StepDefinition d : inventory.stepDefinitions()) {
+            var reach = databaseAccess.reach(assessor.reachable(d.id()));
+            if (!reach.isEmpty()) {
+                databaseEntries.add(new DatabaseEntry("step", d.id(), d.expression(), d.file(), d.line(), reach,
+                        testsPerEntry.getOrDefault(d.id(), 0)));
+            }
+        }
+        List<String> phases = List.of("@BeforeAll hook", "@Before hook", "@BeforeStep hook", "@AfterStep hook", "@After hook",
+                "@AfterAll hook", "step");
+        databaseEntries.sort(Comparator.comparingInt((DatabaseEntry e) -> phases.indexOf(e.kind()))
+                .thenComparing(DatabaseEntry::tests, Comparator.reverseOrder()).thenComparing(DatabaseEntry::id));
+
+        for (CallGraph.Node n : databaseAccess.nodes()) {
+            java.util.BitSet tests = testsByDatabaseNode.get(n.id());
+            databaseNodes.add(new DatabaseNode(n, databaseAccess.reach(List.of(n.id())), tests == null ? 0 : tests.cardinality()));
+        }
+        databaseNodes.sort(Comparator.comparingInt(DatabaseNode::tests).reversed()
+                .thenComparing(d -> d.node().file()).thenComparingInt(d -> d.node().line()));
+
+        for (io.reggraeton.model.DatabaseInventory.SqlStatement st : database().statements()) {
+            java.util.BitSet tests = st.nodeId() == null ? null : testsByDatabaseNode.get(st.nodeId());
+            databaseStatements.add(new DatabaseStatement(st, st.nodeId() == null ? -1 : tests == null ? 0 : tests.cardinality()));
+        }
+    }
+
+    public io.reggraeton.model.DatabaseInventory database() {
+        return inventory.database() == null ? io.reggraeton.model.DatabaseInventory.empty() : inventory.database();
+    }
+
+    public List<DatabaseEntry> databaseEntries() {
+        return databaseEntries;
+    }
+
+    public List<DatabaseNode> databaseNodes() {
+        return databaseNodes;
+    }
+
+    public List<DatabaseStatement> databaseStatements() {
+        return databaseStatements;
+    }
+
+    /** Test cases whose code reaches the database at all. */
+    public int testsReachingDatabase() {
+        java.util.BitSet all = new java.util.BitSet();
+        testsByDatabaseNode.values().forEach(all::or);
+        return all.cardinality();
     }
 
     public List<ImpactByApi> impactByApi() {

@@ -25,7 +25,7 @@ public record CallGraph(List<Node> nodes, List<Edge> edges) {
     /**
      * One external API call site.
      *
-     * @param category {@link #SELENIUM}, {@link #ASSERTION}, {@link #CUCUMBER}, {@link #DRIVER_SETUP} or {@link #EXTERNAL}
+     * @param category {@link #SELENIUM}, {@link #ASSERTION}, {@link #CUCUMBER}, {@link #DRIVER_SETUP}, {@link #DATABASE} or {@link #EXTERNAL}
      * @param api      normalised name, e.g. {@code WebDriver.get}, {@code By.id}, {@code @FindBy}, {@code Select.<init>}
      * @param support  {@link #AUTO} when reggraeton has a translation rule, {@link #MANUAL} when a human must convert it
      */
@@ -39,6 +39,10 @@ public record CallGraph(List<Node> nodes, List<Edge> edges) {
         public static final String EXTERNAL_KEPT = "external-kept";
         /** External call removed from the generated code (external.drop). */
         public static final String EXTERNAL_DROPPED = "external-dropped";
+        /** Database access (JDBC, Spring JDBC, JPA/Hibernate, Oracle driver ...) or SQL text; kept as is. */
+        public static final String DATABASE = "database";
+        /** Prefix of the {@link #api} of SQL found in string literals: {@code SQL INSERT}, {@code SQL NEXTVAL} ... */
+        public static final String SQL_PREFIX = "SQL ";
         public static final String AUTO = "auto";
         public static final String MANUAL = "manual";
     }

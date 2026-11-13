@@ -26,6 +26,8 @@ public class Hooks {
     public void clearCart() {
         context.getDriver().get(com.example.shop.support.Config.baseUrl() + "/login.html");
         ((JavascriptExecutor) context.getDriver()).executeScript("window.localStorage.clear();");
+        com.example.shop.support.Database.execute("DELETE FROM cart_items WHERE user_name = '" + context.getCurrentUser() + "'");
+        com.example.shop.support.Database.nextOrderId();
     }
 
     @After

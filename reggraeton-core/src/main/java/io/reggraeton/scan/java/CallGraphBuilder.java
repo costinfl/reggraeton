@@ -71,7 +71,30 @@ public final class CallGraphBuilder {
         this.glue = glue;
     }
 
+    /** A final field initialised with SQL; attributed to the methods that read it. */
+    private record SqlConstant(String className, com.github.javaparser.ast.body.VariableDeclarator declarator, String text) {
+    }
+
+    private final Map<String, List<SqlConstant>> sqlConstants = new HashMap<>();
+
+    private void findSqlConstants() {
+        for (Map.Entry<String, TypeDeclaration<?>> type : index.types().entrySet()) {
+            for (FieldDeclaration field : type.getValue().getFields()) {
+                if (!field.isFinal()) {
+                    continue;
+                }
+                for (var v : field.getVariables()) {
+                    v.getInitializer().filter(SqlLiterals::isTop).map(SqlLiterals::text)
+                            .filter(text -> !io.reggraeton.scan.db.Sql.operations(text, true).isEmpty())
+                            .ifPresent(text -> sqlConstants.computeIfAbsent(v.getNameAsString(), k -> new ArrayList<>())
+                                    .add(new SqlConstant(type.getKey(), v, text)));
+                }
+            }
+        }
+    }
+
     public CallGraph build() {
+        findSqlConstants();
         for (Map.Entry<String, TypeDeclaration<?>> type : index.types().entrySet()) {
             typesBySimpleName.computeIfAbsent(type.getValue().getNameAsString(), k -> new ArrayList<>()).add(type.getKey());
             for (MethodDeclaration m : type.getValue().getMethods()) {
@@ -168,7 +191,12 @@ public final class CallGraphBuilder {
                                 support.auto() ? ApiUsage.AUTO : ApiUsage.MANUAL, support.note()));
                     }
                 }
-                field.getVariables().forEach(v -> v.getInitializer().ifPresent(init -> c.walk(init, false)));
+                field.getVariables().forEach(v -> v.getInitializer().ifPresent(init -> {
+                    if (!(field.isFinal() && sqlConstants.containsKey(v.getNameAsString())
+                            && sqlConstants.get(v.getNameAsString()).stream().anyMatch(k -> k.declarator() == v))) {
+                        c.walk(init, false); // SQL constants count where they are used
+                    }
+                }));
             } else if (member instanceof InitializerDeclaration init) {
                 c.walk(init.getBody(), false);
             }
@@ -227,9 +255,50 @@ public final class CallGraphBuilder {
                 explicitConstructor(invocation);
             } else if (node instanceof MethodReferenceExpr ref && !root) {
                 methodReference(ref);
+            } else if (node instanceof Expression e && SqlLiterals.isTop(e)) {
+                sql(e);
+            } else if (node instanceof NameExpr name && sqlConstants.containsKey(name.getNameAsString())) {
+                sqlConstant(name, name.getNameAsString());
+            } else if (node instanceof com.github.javaparser.ast.expr.FieldAccessExpr access
+                    && sqlConstants.containsKey(access.getNameAsString())) {
+                sqlConstant(access, access.getNameAsString());
             }
             for (Node child : node.getChildNodes()) {
                 walk(child, false);
+            }
+        }
+
+        /** A read of an SQL constant: resolved when possible, else accepted when the name is unique. */
+        void sqlConstant(Expression read, String name) {
+            List<SqlConstant> candidates = sqlConstants.get(name);
+            SqlConstant constant = null;
+            try {
+                var resolved = read instanceof NameExpr n ? n.resolve() : read.asFieldAccessExpr().resolve();
+                if (resolved.isField()) {
+                    String owner = resolved.asField().declaringType().getQualifiedName();
+                    constant = candidates.stream().filter(k -> k.className().equals(owner)).findFirst().orElse(null);
+                }
+            } catch (RuntimeException | StackOverflowError e) {
+                constant = candidates.size() == 1 ? candidates.get(0) : null;
+            }
+            if (constant != null) {
+                sql(constant.text(), JavaSourceIndex.lineOf(read),
+                        " (constant " + JavaSourceIndex.withoutPackage(constant.className()) + "." + name + ")");
+            }
+        }
+
+        /** SQL in a string literal (or a concatenation of literals and variables). */
+        void sql(Expression e) {
+            sql(SqlLiterals.text(e), JavaSourceIndex.lineOf(e), "");
+        }
+
+        void sql(String text, int line, String origin) {
+            java.util.List<String> ops = io.reggraeton.scan.db.Sql.operations(text, true);
+            if (!ops.isEmpty()) {
+                usages.add(new ApiUsage(ApiUsage.DATABASE, ApiUsage.SQL_PREFIX + ops.get(0),
+                        io.reggraeton.scan.db.Sql.display(text, 300), line, ApiUsage.AUTO,
+                        "SQL" + origin + ": " + String.join(", ", ops)
+                                + (io.reggraeton.scan.db.Sql.writes(ops) ? " (changes data)" : "") + "; kept as is"));
             }
         }
 

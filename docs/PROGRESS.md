@@ -145,6 +145,18 @@ Compiled and tested module; its sources are copied into generated projects (pack
   `reggraeton rules` (→ `docs/rules.md`), `scripts/e2e.sh`, README.
 - 56 tests green (+ opt-in browser tests).
 
+## Later additions
+
+- `reggraeton compare`: JUnit XML of two runs bucketed into regression / different failure / fixed /
+  only in A or B / skipped / same failure / passed; bdd runners use Cucumber's surefire naming.
+- Database access in `assess` (`io.reggraeton.scan.db`): database library calls are a `database`
+  API category (kept by the translator); SQL in Java literals, concatenations and constants becomes
+  `SQL <op>` usages on the call graph node that runs it; SQL scripts, mapper XML, configuration and
+  feature files are scanned as text; connection strings and settings with passwords masked.
+  `DATABASE_HOOK` warnings for hooks reaching the database; report section with tests reaching each
+  hook, step, method and statement. Sample suite: `Database` helper (no-op without `-Ddb.url`) used
+  by the `@cart` hook, `db.properties`, `testdata/reset.sql`.
+
 ## Not verified here
 
 - Microsoft Edge itself (not installed in this sandbox): the `msedge` channel is Playwright's

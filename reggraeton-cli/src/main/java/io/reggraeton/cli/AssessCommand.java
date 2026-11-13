@@ -73,6 +73,10 @@ public final class AssessCommand implements Callable<Integer> {
         console.printf("  test cases         %d  (ready %d, partial %d, blocked %d)%n",
                 inventory.testCases().size(), ready, partial, blocked);
         console.printf("  step definitions   %d, hooks %d%n", inventory.stepDefinitions().size(), inventory.hooks().size());
+        long dbHooks = inventory.findings().stream().filter(f -> "DATABASE_HOOK".equals(f.code())).count();
+        long dbStatements = inventory.database().statements().size();
+        console.printf("  database           %d hooks with database access, %d SQL statements, %d connection settings%n",
+                dbHooks, dbStatements, inventory.database().connections().size());
         console.printf("  findings           %d errors, %d warnings%n%n", errors, warnings);
         console.printf("Report: %s%n", files.get(0));
         console.printf("Also written to %s: %s%n", files.get(0).getParent(),

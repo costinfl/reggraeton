@@ -72,6 +72,8 @@ public final class MarkdownReport {
             md.append('\n');
         }
 
+        database(md, data);
+
         md.append("## Features\n\n");
         md.append("| Feature | File | Tests | Ready | Partial | Blocked |\n|---|---|---:|---:|---:|---:|\n");
         for (ReportData.FeatureRow f : data.features()) {
@@ -120,6 +122,54 @@ public final class MarkdownReport {
             }
         }
         return md.toString();
+    }
+
+    private static void database(StringBuilder md, ReportData data) {
+        var db = data.database();
+        md.append("## Database access\n\n");
+        if (data.databaseEntries().isEmpty() && data.databaseNodes().isEmpty() && db.statements().isEmpty() && db.connections().isEmpty()) {
+            md.append("No database access found.\n\n");
+            return;
+        }
+        md.append(data.testsReachingDatabase()).append(" of ").append(data.tests().size())
+                .append(" test cases reach database code. Database calls and SQL are kept as they are in the generated tests. ")
+                .append("*Changes data* includes sequence increments (NEXTVAL), procedure calls and functions called from DUAL.\n\n");
+        if (!data.databaseEntries().isEmpty()) {
+            md.append("### Hooks and steps reaching the database\n\n| Kind | Hook / step | Location | Database work | Changes data | Tests |\n")
+                    .append("|---|---|---|---|---|---:|\n");
+            for (ReportData.DatabaseEntry e : data.databaseEntries()) {
+                md.append("| ").append(e.kind()).append(" | `").append(cell(e.label())).append("` | `").append(e.file()).append(':')
+                        .append(e.line()).append("` | ").append(cell(e.reach().summary())).append(" | ")
+                        .append(e.reach().writes() ? "**yes**" : "no").append(" | ").append(e.tests()).append(" |\n");
+            }
+            md.append('\n');
+        }
+        if (!data.databaseNodes().isEmpty()) {
+            md.append("### Methods calling the database\n\n| Tests reaching | Method | Location | Database work |\n|---:|---|---|---|\n");
+            for (ReportData.DatabaseNode n : data.databaseNodes()) {
+                md.append("| ").append(n.tests()).append(" | `").append(cell(n.node().id())).append("` | `").append(n.node().file())
+                        .append(':').append(n.node().line()).append("` | ").append(cell(n.reach().summary())).append(" |\n");
+            }
+            md.append('\n');
+        }
+        if (!data.databaseStatements().isEmpty()) {
+            md.append("### SQL statements\n\n| Location | Operations | Statement | Tests reaching |\n|---|---|---|---:|\n");
+            for (ReportData.DatabaseStatement st : data.databaseStatements().subList(0, Math.min(500, data.databaseStatements().size()))) {
+                var s = st.statement();
+                md.append("| `").append(s.file()).append(':').append(s.line()).append("` | ").append(String.join(", ", s.operations()))
+                        .append(s.writes() ? " (changes data)" : "").append(" | `").append(cell(s.text())).append("` | ")
+                        .append(st.tests() < 0 ? "" : String.valueOf(st.tests())).append(" |\n");
+            }
+            md.append('\n');
+        }
+        if (!db.connections().isEmpty()) {
+            md.append("### Connection strings and settings\n\nPasswords are masked.\n\n| Location | Setting | Value |\n|---|---|---|\n");
+            for (var c : db.connections()) {
+                md.append("| `").append(c.file()).append(':').append(c.line()).append("` | ").append(c.key() == null ? "" : "`" + cell(c.key()) + "`")
+                        .append(" | `").append(cell(c.value())).append("` |\n");
+            }
+            md.append('\n');
+        }
     }
 
     private static void row(StringBuilder md, String key, String value) {
