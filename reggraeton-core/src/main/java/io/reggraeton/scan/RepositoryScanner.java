@@ -1,6 +1,7 @@
 package io.reggraeton.scan;
 
 import io.reggraeton.model.CallGraph;
+import io.reggraeton.model.DatabaseInventory;
 import io.reggraeton.model.FeatureFile;
 import io.reggraeton.model.Finding;
 import io.reggraeton.model.Hook;
@@ -11,6 +12,8 @@ import io.reggraeton.model.StepDefinition;
 import io.reggraeton.model.TestCase;
 import io.reggraeton.model.TestCaseAssessment;
 import io.reggraeton.model.TestStep;
+import io.reggraeton.scan.db.DatabaseAccess;
+import io.reggraeton.scan.db.DatabaseScanner;
 import io.reggraeton.scan.java.CallGraphBuilder;
 import io.reggraeton.scan.java.ExternalPolicy;
 import io.reggraeton.scan.java.GlueScanner;
@@ -150,6 +153,10 @@ public final class RepositoryScanner {
         hooks.stream().filter(h -> h.phase().endsWith("All")).forEach(h -> usedNodes.addAll(assessor.reachable(h.id())));
         findings.addAll(Assessor.findings(layout, matched, stepDefinitions, hooks, graph, usedNodes));
 
+        // 5. database access
+        DatabaseInventory database = DatabaseScanner.scan(root, graph);
+        findings.addAll(databaseFindings(hooks, stepDefinitions, graph, assessor, database));
+
         return new Scan(new Inventory(
                 Inventory.SCHEMA_VERSION,
                 OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).toString(),
@@ -162,7 +169,43 @@ public final class RepositoryScanner {
                 glue.dataTableTypes(),
                 graph,
                 assessments,
-                findings), index);
+                findings,
+                database), index);
+    }
+
+    /**
+     * Hooks that reach the database usually prepare or clean up test data: they decide whether a run
+     * can leave the database changed, so each is reported.
+     */
+    private static List<Finding> databaseFindings(List<Hook> hooks, List<StepDefinition> steps, CallGraph graph,
+                                                  Assessor assessor, DatabaseInventory database) {
+        List<Finding> findings = new ArrayList<>();
+        DatabaseAccess access = new DatabaseAccess(graph);
+        for (Hook h : hooks) {
+            DatabaseAccess.Reach reach = access.reach(assessor.reachable(h.id()));
+            if (reach.isEmpty()) {
+                continue;
+            }
+            String tags = h.tagExpression().isBlank() ? "every scenario" : "scenarios tagged " + h.tagExpression();
+            findings.add(Finding.warning("DATABASE_HOOK", "@" + h.phase() + " hook " + shortId(h.id())
+                    + " (" + tags + ") reaches the database: " + reach.summary()
+                    + (reach.writes() ? ". It changes data, so it is test data setup or cleanup" : ""), h.file(), h.line()));
+        }
+        long dbSteps = steps.stream().filter(s -> !access.reach(assessor.reachable(s.id())).isEmpty()).count();
+        if (dbSteps > 0) {
+            findings.add(Finding.info("DATABASE_STEPS", dbSteps + " step definition(s) reach the database; see the Database access section",
+                    null, 0));
+        }
+        if (!database.connections().isEmpty()) {
+            findings.add(Finding.info("DATABASE_CONNECTIONS", database.connections().size()
+                    + " database connection string(s) or setting(s) found; see the Database access section", null, 0));
+        }
+        return findings;
+    }
+
+    private static String shortId(String id) {
+        String cls = id.contains("#") ? id.substring(0, id.indexOf('#')) : id;
+        return cls.substring(cls.lastIndexOf('.') + 1) + (id.contains("#") ? id.substring(id.indexOf('#')) : "");
     }
 
     /**

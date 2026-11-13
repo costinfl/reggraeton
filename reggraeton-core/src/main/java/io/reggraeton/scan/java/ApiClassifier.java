@@ -36,6 +36,11 @@ public final class ApiClassifier {
             return new ApiUsage("timing", "Thread.sleep", code, line, ApiUsage.AUTO,
                     "hard wait kept as is; consider a web-first assertion instead");
         }
+        String database = databaseLibrary(declaringType);
+        if (database != null) {
+            return new ApiUsage(ApiUsage.DATABASE, api, maskCredentials(code), line, ApiUsage.AUTO,
+                    "database access (" + database + "), kept as is");
+        }
         if (isJdk(declaringType)) {
             return null;
         }
@@ -70,6 +75,41 @@ public final class ApiClassifier {
                     ? "library outside the scanned repository that receives or returns Selenium objects; convert by hand"
                     : "listed in external.manual (reggraeton.properties)");
         };
+    }
+
+    /** Library name for database access types, null for anything else. JDBC value types (Date, Timestamp) are not access. */
+    static String databaseLibrary(String type) {
+        if (type.startsWith("java.sql.") || type.startsWith("javax.sql.")) {
+            return type.matches("java\\.sql\\.(Date|Time|Timestamp|Types|JDBCType|SQLType|.*Exception|.*Warning)") ? null : JDBC;
+        }
+        String[][] libraries = {
+                {"oracle.jdbc.", "Oracle JDBC"}, {"oracle.sql.", "Oracle JDBC"}, {"oracle.ucp.", "Oracle UCP"},
+                {"org.springframework.jdbc.", "Spring JDBC"}, {"org.springframework.orm.", "Spring ORM"},
+                {"org.springframework.transaction.", "Spring transactions"}, {"org.springframework.data.jpa.", "Spring Data JPA"},
+                {"org.springframework.data.repository.", "Spring Data"},
+                {"org.hibernate.", "Hibernate"}, {"javax.persistence.", "JPA"}, {"jakarta.persistence.", "JPA"},
+                {"org.dbunit.", "DbUnit"}, {"org.apache.ibatis.", "MyBatis"}, {"org.mybatis.", "MyBatis"},
+                {"org.jooq.", "jOOQ"}, {"org.jdbi.", "Jdbi"}, {"org.sql2o.", "Sql2o"}, {"org.flywaydb.", "Flyway"},
+                {"liquibase.", "Liquibase"}, {"com.zaxxer.hikari.", "HikariCP"}, {"org.apache.commons.dbcp", "Commons DBCP"},
+                {"org.apache.commons.dbutils.", "Commons DbUtils"}, {"com.mchange.v2.c3p0.", "c3p0"},
+                {"org.apache.tomcat.jdbc.", "Tomcat JDBC"}, {"com.github.database.rider.", "Database Rider"},
+                {"org.testcontainers.containers.", "Testcontainers"}};
+        for (String[] library : libraries) {
+            if (type.startsWith(library[0])) {
+                return library[1];
+            }
+        }
+        return null;
+    }
+
+    /** Name used for JDK database access; such code needs no extra dependency. */
+    public static final String JDBC = "JDBC";
+
+    /** getConnection(url, user, "secret") and passwords in JDBC URLs must not end up in reports. */
+    static String maskCredentials(String code) {
+        String s = code.replaceAll("(getConnection\\s*\\([^,]*,[^,]*,\\s*)\"[^\"]*\"", "$1\"***\"");
+        s = s.replaceAll("(?i)(setPassword\\s*\\(\\s*)\"[^\"]*\"", "$1\"***\"");
+        return io.reggraeton.scan.db.Connections.mask(s);
     }
 
     private static boolean isDriverSetup(String declaringType, String member) {

@@ -410,7 +410,7 @@ final class SourceTranslator {
                 || "timing".equals(info.category())) {
             return;
         }
-        if (ApiUsage.EXTERNAL_KEPT.equals(info.category())) {
+        if (ApiUsage.EXTERNAL_KEPT.equals(info.category()) || ApiUsage.DATABASE.equals(info.category())) {
             return;
         }
         if (ApiUsage.EXTERNAL_DROPPED.equals(info.category())) {

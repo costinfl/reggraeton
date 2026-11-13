@@ -116,7 +116,10 @@ public final class ProjectGenerator {
         boolean keptExternal = inventory.callGraph().nodes().stream()
                 .filter(n -> used.contains(n.id()))
                 .flatMap(n -> n.apiUsages().stream())
-                .anyMatch(u -> io.reggraeton.model.CallGraph.ApiUsage.EXTERNAL_KEPT.equals(u.category()));
+                .anyMatch(u -> io.reggraeton.model.CallGraph.ApiUsage.EXTERNAL_KEPT.equals(u.category())
+                        || io.reggraeton.model.CallGraph.ApiUsage.DATABASE.equals(u.category())
+                        && !u.api().startsWith(io.reggraeton.model.CallGraph.ApiUsage.SQL_PREFIX)
+                        && !u.note().contains("(" + io.reggraeton.scan.java.ApiClassifier.JDBC + ")"));
         ProjectFiles.Carried carried = keptExternal ? ProjectFiles.carriedDependencies(inventory.layout()) : null;
         if (carried != null && !carried.withoutVersion().isEmpty()) {
             problems.add("Original dependencies with unknown version (not added to pom.xml): "

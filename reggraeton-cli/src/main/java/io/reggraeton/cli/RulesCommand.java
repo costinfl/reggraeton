@@ -30,9 +30,10 @@ public final class RulesCommand implements Callable<Integer> {
         md.append("# Selenium to Playwright translation rules\n\n");
         md.append("Generated with `reggraeton rules`. **auto**: rewritten by `convert`. **manual**: replaced by a\n");
         md.append("`TODO(reggraeton)` stub that throws `PendingConversionException` until a human rewrites it.\n");
-        md.append("Calls into libraries outside the scanned repository are always manual. Driver creation\n");
+        md.append("Calls into other libraries are kept unless Selenium objects pass through them. Driver creation\n");
         md.append("(`new ChromeDriver(..)`, browser options, WebDriverManager) is replaced by the generated\n");
-        md.append("`PlaywrightSession`; JUnit/AssertJ/Hamcrest/TestNG assertions are kept as they are.\n\n");
+        md.append("`PlaywrightSession`; JUnit/AssertJ/Hamcrest/TestNG assertions and database access\n");
+        md.append("(JDBC, Spring, JPA/Hibernate, Oracle driver, SQL) are kept as they are.\n\n");
         for (boolean auto : new boolean[] {true, false}) {
             md.append(auto ? "## Translated automatically\n\n" : "## Manual conversion\n\n");
             md.append("| Selenium API | Playwright |\n|---|---|\n");

@@ -18,7 +18,8 @@ public record Inventory(
         List<DataTableTypeDefinition> dataTableTypes,
         CallGraph callGraph,
         List<TestCaseAssessment> assessments,
-        List<Finding> findings) {
+        List<Finding> findings,
+        DatabaseInventory database) {
 
-    public static final String SCHEMA_VERSION = "1";
+    public static final String SCHEMA_VERSION = "2";
 }

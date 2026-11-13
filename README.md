@@ -77,6 +77,28 @@ Every test case is rated **ready** (every reachable Selenium call has a translat
 ambiguous steps). Findings include undefined/ambiguous/unused steps, unparseable files, glue
 outside the configured glue packages and every call site that needs manual work, with file:line.
 
+### Database access
+
+The assessment also lists where the suite talks to a database, because those parts decide whether a
+run can leave data changed:
+
+- **Hooks and steps reaching the database**: `@Before`/`@After` hooks that do (usually test data
+  setup or cleanup, also reported as `DATABASE_HOOK` warnings) and step definitions, with what they
+  do and how many tests use them.
+- **Methods calling the database**: JDBC, Oracle JDBC/UCP, Spring JDBC/ORM/Data, JPA/Hibernate,
+  DbUnit, Database Rider, MyBatis, jOOQ, Jdbi, Flyway, Liquibase, connection pools.
+- **SQL statements** in Java string literals (also concatenated, also in constants, counted where
+  they are used), `.sql`/PL/SQL scripts, mapper XML, configuration and feature files. Each is
+  classified (`INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, DDL, `CALL`, PL/SQL block,
+  `NEXTVAL`/`CURRVAL`, `SELECT ... FROM DUAL`, `SELECT`, `COMMIT` ...). **Changes data** includes sequence
+  increments (`SELECT seq.NEXTVAL FROM dual`, never rolled back), stored procedure calls and
+  non-built-in functions called from `DUAL`, which may write.
+- **Connection strings and settings** (`jdbc:` URLs anywhere, `db.*`/`datasource.*` keys in
+  configuration files), with passwords masked.
+
+Database code is kept unchanged by `convert` (the generated `pom.xml` then also carries the original
+project's dependencies, e.g. the Oracle driver), so the generated tests need the same database.
+
 Options: `--classpath cp.txt` (jars of the scanned project from
 `mvn dependency:build-classpath -Dmdep.outputFile=cp.txt`, for better type resolution),
 `--base-package`, `--fail-on none|error|blocked|partial` (exit code 2, for CI gates).
