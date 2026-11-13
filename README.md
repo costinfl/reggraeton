@@ -9,6 +9,7 @@ Edge by default). **Browsers are never downloaded.**
 ```
 bin/reggraeton assess  <repo> [--out reggraeton-report]          # 1. discovery + assessment (read-only)
 bin/reggraeton convert <repo> --out <dir> --mode bdd|native       # 2. generate the Playwright project
+bin/reggraeton compare <runA> <runB> [--label-a old --label-b new] # 3. compare two test runs
 bin/reggraeton doctor  [--channel msedge|chrome|chromium]         # check Java, Maven, installed browsers
 bin/reggraeton rules                                              # which Selenium APIs convert automatically
 ```
@@ -107,6 +108,31 @@ Code without an automatic Playwright equivalent is never dropped silently: it be
 `// TODO(reggraeton)` stub that throws `PendingConversionException` (naming the original
 file:line) until it is rewritten, so affected tests fail rather than pass. Steps without a step
 definition produce failing tests that say so. See [docs/rules.md](docs/rules.md) for the rules.
+
+## 3. Compare two runs
+
+Run the same generated suite against two builds of the application (Java 11 vs Java 17, release
+N vs N+1), keep each run's `target/surefire-reports` (or the JUnit XML Jenkins archived), then:
+
+```
+bin/reggraeton compare runs/java11 runs/java17 --label-a "java 11" --label-b "java 17" --out compare
+```
+
+A test does not have to pass to be useful: what counts is whether it behaves the same in both
+runs. Every test lands in one bucket: **regression** (passed in A, fails in B), **different
+failure** (fails in both, for another reason), **fixed**, **only in A / only in B**, **skipped**,
+**same failure**, **passed**. Failure messages are compared with numbers, ids and timings masked.
+Native-mode tests are mapped back to their feature file and line through `traceability.csv`.
+Writes `compare.html`, `compare.md`, `compare.json`; `--fail-on regression|difference` returns
+exit code 2 for CI gates. Each `<runX>` can be a generated project, a folder holding `TEST-*.xml`
+files (searched recursively, including `target/`), or a single report file.
+
+Generated bdd projects use Cucumber's `surefire` naming strategy, so the JUnit XML names each
+scenario and outline row (`Rejected login - wrong credentials - Example #1.2`) rather than only
+`Example #1.2`.
+
+For a fair comparison both runs should start from the same data: run A, restore the database,
+run B.
 
 ## Calls into other libraries (`reggraeton.properties`)
 

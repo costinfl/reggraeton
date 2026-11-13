@@ -29,4 +29,27 @@ class OtherCommandsTest {
         // exit code depends on the machine; it must run without launching or downloading anything
         assertThat(Main.execute("doctor", "--channel", "chromium")).isIn(List.of(0, 1));
     }
+
+    @Test
+    void compareGatesOnRegressions(@org.junit.jupiter.api.io.TempDir Path dir) throws Exception {
+        writeReport(dir.resolve("old"), "<testcase name=\"login()\" classname=\"Login\"/>");
+        writeReport(dir.resolve("new"), "<testcase name=\"login()\" classname=\"Login\"><failure message=\"x\"/></testcase>");
+        Path out = dir.resolve("cmp");
+
+        assertThat(Main.execute("compare", dir.resolve("old").toString(), dir.resolve("new").toString(),
+                "--out", out.toString(), "--label-a", "java11", "--label-b", "java17")).isZero();
+        assertThat(out.resolve("compare.html")).exists();
+        assertThat(Main.execute("compare", dir.resolve("old").toString(), dir.resolve("new").toString(),
+                "--out", out.toString(), "--fail-on", "regression")).isEqualTo(2);
+        assertThat(Main.execute("compare", dir.resolve("old").toString(), dir.resolve("old").toString(),
+                "--out", out.toString(), "--fail-on", "difference")).isZero();
+        assertThat(Main.execute("compare", dir.resolve("old").toString(), dir.resolve("missing").toString(),
+                "--out", out.toString())).isNotZero();
+    }
+
+    private static void writeReport(Path dir, String testcase) throws Exception {
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Files.writeString(dir.resolve("TEST-Login.xml"),
+                "<?xml version=\"1.0\"?><testsuite name=\"Login\">" + testcase + "</testsuite>");
+    }
 }
